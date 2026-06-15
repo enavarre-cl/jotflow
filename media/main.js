@@ -868,7 +868,7 @@
     // Backend y modelo son estáticos en el HTML; aquí solo system prompt + parámetros.
     configFields.innerHTML = '';
 
-    // System prompt: referencia a un archivo .sysprompt, o inline.
+    // System prompt: referencia a un archivo .md, o inline.
     if (doc.systemPromptFile) {
       const ref = document.createElement('div');
       ref.className = 'sysref';
@@ -876,7 +876,7 @@
       name.className = 'sysref-name';
       name.textContent = '📄 ' + doc.systemPromptFile;
       const open = document.createElement('button');
-      open.textContent = t('Open'); open.title = t('Open the .sysprompt');
+      open.textContent = t('Open'); open.title = t('Open the .md file');
       open.addEventListener('click', () => vscode.postMessage({ type: 'openSysPrompt' }));
       const clear = document.createElement('button');
       clear.textContent = t('Remove'); clear.title = t('Back to inline system prompt');
@@ -896,11 +896,11 @@
       actions.className = 'sysref-actions';
       const create = document.createElement('button');
       create.textContent = t('Save');
-      create.title = t('Save the prompt to a .sysprompt (markdown) file and reference it');
+      create.title = t('Save the prompt to a .md file and reference it');
       create.addEventListener('click', () => vscode.postMessage({ type: 'createSysPrompt' }));
       const pick = document.createElement('button');
       pick.textContent = t('Load');
-      pick.title = t('Use an existing .sysprompt file');
+      pick.title = t('Use an existing .md file');
       pick.addEventListener('click', () => vscode.postMessage({ type: 'pickSysPrompt' }));
       actions.appendChild(create); actions.appendChild(pick);
       const wrap = document.createElement('div');

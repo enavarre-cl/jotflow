@@ -45,15 +45,6 @@
         "priority": "default"
       }
     ],
-    "languages": [
-      {
-        "id": "markdown",
-        "extensions": [
-          ".sysprompt"
-        ],
-        "aliases": []
-      }
-    ],
     "configuration": [
       {
         "title": "%config.title.general%",

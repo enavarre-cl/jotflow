@@ -37,13 +37,13 @@
     'System prompt (file)': 'System prompt (archivo)',
     'System instructions…': 'Instrucciones del sistema…',
     'Open': 'Abrir',
-    'Open the .sysprompt': 'Abrir el .sysprompt',
+    'Open the .md file': 'Abrir el .md',
     'Remove': 'Quitar',
     'Back to inline system prompt': 'Volver al system prompt inline',
     'Save': 'Guardar',
-    'Save the prompt to a .sysprompt (markdown) file and reference it': 'Guarda el prompt en un archivo .sysprompt (markdown) y lo referencia',
+    'Save the prompt to a .md file and reference it': 'Guarda el prompt en un archivo .md y lo referencia',
     'Load': 'Cargar',
-    'Use an existing .sysprompt file': 'Usar un archivo .sysprompt existente',
+    'Use an existing .md file': 'Usar un archivo .md existente',
     // SCHEMA: grupos y parámetros
     'General': 'Ajustes', // grupo de parámetros (distinto del panel 'Settings')
     'Limit response length': 'Limitar longitud de respuesta',

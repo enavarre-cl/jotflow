@@ -40,7 +40,7 @@ export interface ChatDoc {
   provider: ProviderId;
   model: string;
   systemPrompt: string;
-  systemPromptFile?: string; // ruta a un .sysprompt (relativa al .chat); si existe, prevalece
+  systemPromptFile?: string; // ruta a un .md (relativa al .chat); si existe, prevalece
   params: ChatParams;
   summary?: ChatSummary;
   usage?: TokenUsage; // tokens acumulados del chat

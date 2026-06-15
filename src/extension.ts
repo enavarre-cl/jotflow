@@ -45,7 +45,7 @@ const BACKEND_ES: Record<string, string> = {
     'El modelo no devolvió contenido. Prueba con otro modelo; en OpenRouter, revisa créditos/límites de la key.',
   'No model selected. Make sure the backend is active and press ⟳.':
     'No hay modelo seleccionado. Comprueba que el backend esté activo y pulsa ⟳.',
-  'Create .sysprompt': 'Crear .sysprompt',
+  'Create .md': 'Crear .md',
   'Use as system prompt': 'Usar como system prompt',
   'fork': 'bifurcación',
   'Set the Piper voice model path in settings (langChat.tts.piperModel).':
@@ -646,13 +646,13 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       post({ type: 'ttsDone' });
     };
 
-    // System prompt efectivo: el del archivo .sysprompt referenciado, si existe; si no, el inline.
+    // System prompt efectivo: el del archivo .md referenciado, si existe; si no, el inline.
     const resolveSystemPrompt = (doc: ChatDoc): string => {
       if (doc.systemPromptFile) {
         try {
           const dir = path.dirname(document.uri.fsPath);
           const resolved = path.resolve(dir, doc.systemPromptFile);
-          // Confina al directorio del .chat: un .sysprompt no puede apuntar fuera (p. ej. ../../etc/passwd).
+          // Confina al directorio del .chat: el archivo no puede apuntar fuera (p. ej. ../../etc/passwd).
           if (resolved !== dir && !resolved.startsWith(dir + path.sep)) {
             throw new Error('systemPromptFile fuera del directorio del .chat');
           }
@@ -1423,15 +1423,15 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
           await vscode.commands.executeCommand('workbench.action.openSettings', 'langChat');
           break;
         case 'createSysPrompt': {
-          // Crea un .sysprompt (con el prompt inline actual) junto al .chat, lo referencia y lo abre.
+          // Crea un .md (con el prompt inline actual) junto al .chat, lo referencia y lo abre.
           const doc = getDoc();
           if (!doc) break;
           const dir = vscode.Uri.joinPath(document.uri, '..');
           const stem = path.basename(document.uri.fsPath).replace(/\.chat$/i, '') || 'system';
           const target = await vscode.window.showSaveDialog({
-            defaultUri: vscode.Uri.joinPath(dir, `${stem}.sysprompt`),
-            filters: { 'System prompt': ['sysprompt', 'md'] },
-            saveLabel: tr('Create .sysprompt'),
+            defaultUri: vscode.Uri.joinPath(dir, `${stem}.md`),
+            filters: { 'System prompt': ['md', 'sysprompt', 'txt'] },
+            saveLabel: tr('Create .md'),
           });
           if (!target) break;
           await vscode.workspace.fs.writeFile(target, Buffer.from(doc.systemPrompt || '', 'utf8'));
@@ -1446,7 +1446,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
           if (!doc) break;
           const picked = await vscode.window.showOpenDialog({
             canSelectMany: false,
-            filters: { 'System prompt': ['sysprompt', 'md', 'txt'] },
+            filters: { 'System prompt': ['md', 'sysprompt', 'txt'] },
             openLabel: tr('Use as system prompt'),
           });
           if (!picked || !picked[0]) break;
