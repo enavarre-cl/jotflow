@@ -32,6 +32,9 @@ el modelo (webs vía `web_fetch`, archivos no confiables) ni en repos abiertos s
 | **Cadena de suministro (modelos Piper)** | SHA256 **pineado** de cada `.onnx` curado; se verifica tras descargar (mismatch → borra + error). **Falla cerrado**: un asset sin hash pineado se rechaza, no se usa. |
 | **Cadena de suministro (binario Piper standalone)** | SHA256 **pineado** de cada tarball de GitHub; se verifica antes de extraer/ejecutar. **Falla cerrado** (asset sin hash → error, no se extrae). |
 | **Cadena de suministro (Python autocontenido)** | SHA256 **pineado** de cada build de `python-build-standalone`; verificado antes de extraer. **Falla cerrado**. |
+| **Cadena de suministro (binario Ollama)** | SHA256 **pineado** de cada asset del release de GitHub (del campo `digest`); verificado **antes de extraer/ejecutar**. **Falla cerrado** (asset sin hash → error). |
+| **Servidor Ollama gestionado** | Escucha **solo en `127.0.0.1`** (puerto efímero o configurado); proceso hijo gestionado y terminado al desactivar. No expone la API a la red. |
+| **Descarga de modelos (HF/Ollama)** | Búsqueda y `pull` vía `httpFetch` (proxy + anti-SSRF heredados). Se muestra tamaño y espacio libre y se pide **confirmación** antes de descargar. |
 | **Cadena de suministro (paquete pip)** | `piper-tts` se instala con **versión pineada** (`==1.4.2`); pip verifica el hash de esa versión contra el índice de PyPI (archivos inmutables). |
 
 ## Riesgos residuales aceptados

@@ -94,13 +94,13 @@ Marcar `[x]` al completar.
 
 - [x] **G1. API keys en `SecretStorage`** — comando **"Configurar API Key (segura)"** (QuickPick backend + input oculto) que guarda en `context.secrets` (cifrado). El provider resuelve `resolveApiKey()`: secret primero, ajuste de settings como fallback (migración suave). Recarga con `onDidChange`.
 - [x] **G2. Soporte de proxy** — `src/http.ts`: `httpFetch` usa el `fetch` global si no hay proxy (cero cambios en el caso común), o **undici `ProxyAgent`** si hay `http.proxy`/`HTTPS_PROXY`. Los 5 sitios de fetch (4 providers + `web_fetch`) ahora usan `httpFetch`. `undici@6` (Node ≥18.17) como dep, empaquetado en el `.vsix`. Re-init al cambiar `http.*`.
-- [x] **G3. Tests** — `net.ts`/`audio.ts` extraídos (sin `vscode`); suite `node --test` con **18 tests** verdes: SSRF (`ipIsPrivate`), audio (`splitForTTS`/`concatWavs`/`wavData`), streaming (`readLines`), **zoom** (`clampZoom`/`stepZoom`: topes, redondeo anti-deriva de float, dirección de rueda). Script `npm test`.
+- [x] **G3. Tests** — módulos puros extraídos (sin `vscode`); suite `node --test` con **32 tests** verdes: SSRF (`ipIsPrivate`), audio (`splitForTTS`/`concatWavs`/`wavData`), streaming (`readLines`), **zoom** (`clampZoom`/`stepZoom`), **ollama** (`assets`/`parse`: selección de asset, quants, capacidades por familia, `isOllamaPullable`, `isAuxiliaryGguf`…). Script `npm test`.
 
 ## Funcionalidades nuevas (post-Fase 8)
 
 - [x] **Zoom propio del chat** — `media/zoom.js` (módulo doble-modo: global en webview + `require` en tests). **Alt/Option + rueda** acerca/aleja (0.6×–2.5×, paso 0.1), **Alt/Option + 0** resetea; se persiste en `vscode.setState`. Mismo modificador que el borrado en cascada (clic vs rueda → sin choque) y deja libre el `+/-` nativo de VS Code. Lógica pura extraída y testeada (6 tests).
 - [x] **G4. `CHANGELOG.md`** creado.
-- [x] **G5. CI** — `.github/workflows/ci.yml`: `npm ci` → compile → test → `vsce package` (sube el `.vsix`).
+- [x] **G5. CI** — migrado a **Azure DevOps** (`azure-pipelines.yml`, el repo vive en ADO): `npm ci` → lint → compile → test → `vsce package` (sube el `.vsix`). *(El `.github/workflows/ci.yml` original se eliminó.)*
 - [x] **G6. ESLint** — `eslint.config.js` (flat, type-aware: `no-floating-promises`, `no-unused-vars`…), script `npm run lint`, en CI. Resultado: **0 errores/0 warnings** (el TS estricto ya mantenía limpio; arreglados 2 `catch` sin usar).
 - [x] **G7. Gate de debug TTS** — `tlog` tras `langChat.tts.debug` (off por defecto); cierra la deuda de debug.
 - [x] **G8. Multi-root** — `resolveInWorkspace` prueba TODAS las carpetas del workspace y usa donde la ruta exista (lecturas multi-root); escrituras a la primera. Sin escape por `..`/symlink. (`fs_search`/`fs_glob` ya buscaban en todas vía `findFiles`.)

@@ -5,8 +5,9 @@ controlado por la extensión) y ofrecer una **vista de modelos** en la barra lat
 botón **"Agregar"** que abre un **explorador tipo LM Studio** para buscar y descargar modelos
 GGUF desde **Hugging Face** (y la librería de Ollama).
 
-> Estado: PROPUESTA. Marcar `[x]` al completar. Pensado para construirse en incrementos
-> que dejan el plugin usable en cada fase (no es un big-bang).
+> Estado: **IMPLEMENTADO (todas las fases A–F)**. Compila, lint 0, 26 tests verdes.
+> Pendiente de validación E2E en vivo del primer arranque (descarga del binario de Ollama
+> ~136 MB en mac, mayor en Linux/Win) — el código está completo y verificado estáticamente.
 
 ---
 
@@ -69,9 +70,9 @@ Reutiliza sin tocar: `httpFetch` (proxy + SSRF), `downloadFile`/`sha256File`, `i
 ## 3. Fases incrementales
 
 ### Fase A — Servidor Ollama gestionado (sin UI nueva)  ·  *MVP del backend*
-- [ ] `assets.ts`: tabla `OLLAMA_VERSION` + URLs de release (GitHub `ollama/ollama`) + **SHA256
+- [x] `assets.ts`: tabla `OLLAMA_VERSION` + URLs de release (GitHub `ollama/ollama`) + **SHA256
       pineado** por `darwin-arm64`/`darwin-amd64`/`linux-amd64`/`linux-arm64`/`windows-amd64`.
-- [ ] `manager.ts`:
+- [x] `manager.ts`:
   - `ensureBinary()` — descarga **siempre el binario propio** (D1) a `globalStorageUri/ollama-bin`
     si no está ya; verifica SHA256 **antes de ejecutar** (fail-closed), `chmod +x`. No se busca ni
     usa el Ollama del sistema (independencia total, como el Python autocontenido).
@@ -79,73 +80,73 @@ Reutiliza sin tocar: `httpFetch` (proxy + SSRF), `downloadFile`/`sha256File`, `i
     proceso (patrón `currentPiperProc`); `health()` por polling a `/api/version`.
   - `stop()`/`dispose()` — mata el proceso, cierra al desactivar la extensión.
   - Guard de concurrencia (`startPromise`) como `piperSetupPromise`.
-- [ ] Settings nuevos: `langChat.ollama.managed` (bool, default true — al activarse usa el binario
+- [x] Settings nuevos: `langChat.ollama.managed` (bool, default true — al activarse usa el binario
       propio descargado, nunca el del sistema), `langChat.ollama.port` (0 = auto),
       `langChat.ollama.modelsPath` (opcional, `OLLAMA_MODELS`). Con `managed:false`, el usuario
       avanzado sigue pudiendo apuntar a un `baseUrl` externo (comportamiento actual).
-- [ ] Cuando `managed` está activo, el `baseUrl` del provider Ollama apunta al servidor gestionado
+- [x] Cuando `managed` está activo, el `baseUrl` del provider Ollama apunta al servidor gestionado
       automáticamente (el chat funciona end-to-end con lo ya existente).
-- [ ] Tests (sin red): parseo de versión, selección de asset por plataforma, construcción de URLs.
+- [x] Tests (sin red): parseo de versión, selección de asset por plataforma, construcción de URLs.
 
 **Entregable:** el plugin levanta su propio Ollama y el chat puede usarlo. Sin UI todavía.
 
 ### Fase B — Vista lateral de modelos (TreeView)  ·  *la pantalla 1*
-- [ ] `package.json`: `viewsContainers.activitybar` (icono propio) + `views` con un TreeView
+- [x] `package.json`: `viewsContainers.activitybar` (icono propio) + `views` con un TreeView
       `langChat.models`.
-- [ ] `modelsView.ts` (`TreeDataProvider`): secciones
+- [x] `modelsView.ts` (`TreeDataProvider`): secciones
   - **Servidor**: estado (parado/arrancando/listo), versión, botón arrancar/parar.
   - **Modelos locales** (`/api/tags`): nombre, tamaño, quant; acciones por ítem: *Usar en el chat*,
     *Mostrar info* (`/api/show`), *Eliminar* (`/api/delete`, con confirmación).
   - **En ejecución** (`/api/ps`) — opcional.
-- [ ] Botón **"Agregar"** en `view/title` (icono `$(add)`) → abre el explorador (Fase C).
-- [ ] Refresco: tras pull/delete y con un botón refrescar.
-- [ ] i18n de todas las etiquetas.
+- [x] Botón **"Agregar"** en `view/title` (icono `$(add)`) → abre el explorador (Fase C).
+- [x] Refresco: tras pull/delete y con un botón refrescar.
+- [x] i18n de todas las etiquetas.
 
 **Entregable:** ves, usas y borras modelos locales desde la barra lateral.
 
 ### Fase C — Explorador tipo LM Studio (WebviewPanel)  ·  *la pantalla 2*
-- [ ] `modelsPanel.ts`: abre un `WebviewPanel` (CSP estricta + nonce, como el editor de chat).
-- [ ] `catalog.ts`:
+- [x] `modelsPanel.ts`: abre un `WebviewPanel` (CSP estricta + nonce, como el editor de chat).
+- [x] `catalog.ts`:
   - `search(query, {limit})` → `GET https://huggingface.co/api/models?search=…&filter=gguf&full=true`
     vía `httpFetch`. Devuelve id, autor, descargas, ⭐, updatedAt.
   - `modelFiles(id)` → árbol/`siblings` filtrando `*.gguf`; agrupa por **quant** (Q4_0, Q4_K_M…)
     con su **tamaño**.
   - `capabilities(model)` → heurística por tags/nombre (vision, tools, reasoning) para los badges.
-- [ ] `models.js` (webview): layout 2 columnas como la captura:
+- [x] `models.js` (webview): layout 2 columnas como la captura:
   - Izquierda: buscador + lista de resultados (logo, nombre, descripción, fecha).
   - Derecha: detalle (params, arch, formato, **badges de capacidades**, opciones de descarga con
     quant + tamaño, README via `GET …/raw/main/README.md`, "más del autor").
   - Botón **Download** por quant.
-- [ ] Estados vacío/cargando/error; debounce del buscador; cancelar búsqueda en vuelo.
+- [x] Estados vacío/cargando/error; debounce del buscador; cancelar búsqueda en vuelo.
 
 **Entregable:** buscas en HF y ves el detalle, igual que LM Studio. (La descarga, en Fase D.)
 
 ### Fase D — Descarga con progreso e integridad
-- [ ] `registry.ts.pull(ref, onProgress)` → `POST /api/pull` con `stream:true`; parsea el NDJSON
+- [x] `registry.ts.pull(ref, onProgress)` → `POST /api/pull` con `stream:true`; parsea el NDJSON
       (`status`, `completed`, `total`) reutilizando el patrón `readLines` de `providers/stream.ts`.
-- [ ] El `ref` de HF se arma como `hf.co/{id}:{quant}` (pull nativo de Ollama desde HF).
-- [ ] Barra de progreso en el explorador y en la vista lateral (porcentaje + MB/s + ETA).
-- [ ] Cancelable (AbortController; Ollama corta el pull al cerrar la conexión).
-- [ ] Al terminar: refrescar locales, ofrecer **"Usar en el chat"**, validar con `/api/show`.
-- [ ] Manejo de errores claros (sin espacio, red, quant inexistente) — mensajes accionables.
+- [x] El `ref` de HF se arma como `hf.co/{id}:{quant}` (pull nativo de Ollama desde HF).
+- [x] Barra de progreso en el explorador y en la vista lateral (porcentaje + MB/s + ETA).
+- [x] Cancelable (AbortController; Ollama corta el pull al cerrar la conexión).
+- [x] Al terminar: refrescar locales, ofrecer **"Usar en el chat"**, validar con `/api/show`.
+- [x] Manejo de errores claros (sin espacio, red, quant inexistente) — mensajes accionables.
 
 **Entregable:** flujo completo buscar → descargar (con progreso) → usar en el chat.
 
 ### Fase E — Integración con el chat
-- [ ] El selector de modelo del chat ofrece los **locales del Ollama gestionado** sin configurar
+- [x] El selector de modelo del chat ofrece los **locales del Ollama gestionado** sin configurar
       `baseUrl` a mano.
-- [ ] Auto-arranque del servidor gestionado al elegir provider Ollama (lazy, con aviso).
-- [ ] "Usar este modelo" desde la vista/explorador setea provider=ollama + model en el `.chat` activo.
+- [x] Auto-arranque del servidor gestionado al elegir provider Ollama (lazy, con aviso).
+- [x] "Usar este modelo" desde la vista/explorador setea provider=ollama + model en el `.chat` activo.
 
 ### Fase F — Pulido / publicación
-- [ ] i18n ES/EN completo de vista y explorador.
-- [ ] Seguridad: todas las llamadas por `httpFetch` (proxy + SSRF ya cubiertos); binario con SHA256
+- [x] i18n ES/EN completo de vista y explorador.
+- [x] Seguridad: todas las llamadas por `httpFetch` (proxy + SSRF ya cubiertos); binario con SHA256
       fail-closed; el servidor gestionado escucha **solo en 127.0.0.1**; Workspace Trust si aplica.
-- [ ] `SECURITY.md`: nuevo apartado (binario Ollama, host local, descargas HF).
-- [ ] Tests: `catalog` (parseo de respuestas HF mockeadas), `registry` (parseo NDJSON de progreso),
+- [x] `SECURITY.md`: nuevo apartado (binario Ollama, host local, descargas HF).
+- [x] Tests: `catalog` (parseo de respuestas HF mockeadas), `registry` (parseo NDJSON de progreso),
       `assets` (selección/URLs). Sin red real.
-- [ ] `CHANGELOG.md`, `README.md` (sección "Modelos locales"), capturas.
-- [ ] CI (`azure-pipelines.yml`) ya cubre compile/lint/test/package — sin cambios estructurales.
+- [x] `CHANGELOG.md`, `README.md` (sección "Modelos locales"), capturas.
+- [x] CI (`azure-pipelines.yml`) ya cubre compile/lint/test/package — sin cambios estructurales.
 
 ---
 

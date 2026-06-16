@@ -52,9 +52,23 @@ Con el toggle **«Tools»** activo (en ⚙, disponible con todos los backends: O
 
 Las tools de cada servidor MCP se exponen como `servidor__tool`. Las llamadas y resultados se muestran en el chat y se guardan en el `.chat`.
 
+## Modelos locales (Ollama embebido)
+
+Lang Chat puede gestionar su **propio servidor Ollama** sin que tengas que instalar nada:
+
+- En la **barra lateral** (icono de Lang Chat) tienes la vista **Modelos**: estado del servidor y
+  tus modelos locales (usar en el chat, ver info, eliminar).
+- El botón **Agregar** abre un **explorador tipo LM Studio**: busca modelos **GGUF** en Hugging Face,
+  muestra capacidades y opciones de cuantización, y los **descarga con progreso** (te avisa del
+  tamaño y el espacio libre antes).
+- La primera vez se descarga el binario de Ollama (verificado por SHA256) a tu almacenamiento global;
+  el servidor corre solo en `127.0.0.1`. Configurable en *Ajustes → Lang Chat → Ollama*
+  (`managed`, `port`, `modelsPath`).
+
 ## Características
 
 - 📄 Conversaciones como **archivos `.chat`** (config de inferencia + historial, editables y versionables).
+- 🦙 **Ollama embebido** + explorador de modelos GGUF de Hugging Face (descarga con progreso).
 - 💬 Respuestas en **streaming** token a token.
 - 🧠 **System prompt**, **modelo**, **backend**, `temperature` y `maxTokens` por archivo.
 - 🔀 **Selector de modelo** que lista los modelos disponibles del backend.
