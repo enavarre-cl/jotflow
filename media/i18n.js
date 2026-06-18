@@ -14,6 +14,13 @@
     'Zoom in (Alt/Option + wheel)': 'Acercar (Alt/Option + rueda)',
     'Zoom out (Alt/Option + wheel)': 'Alejar (Alt/Option + rueda)',
     'Reset zoom (Alt/Option + 0)': 'Restablecer zoom (Alt/Option + 0)',
+    // Corrector ortográfico
+    'Spell-check': 'Corrector',
+    'Spell-check language': 'Idioma del corrector',
+    'Automatic (system)': 'Automático (sistema)',
+    'Off': 'Desactivado',
+    'No suggestions': 'Sin sugerencias',
+    'Add to dictionary': 'Agregar al diccionario',
     // Buscador
     'Search in chat…': 'Buscar en el chat…',
     'Previous match (Shift+Enter)': 'Anterior (Shift+Enter)',
@@ -75,8 +82,6 @@
     'Recommended': 'Recomendada',
     'Non-standard file names: it will be downloaded and imported into Ollama (no resume).': 'Nombres de fichero no estándar: se descargará el fichero y se importará a Ollama (sin reanudar).',
     'No README': 'Sin README',
-    'Starting Ollama…': 'Arrancando Ollama…',
-    'Downloading engine': 'Descargando el motor',
     'Downloading…': 'Descargando…',
     'Downloaded': 'Descargado',
     'Retry': 'Reintentar',
@@ -132,7 +137,6 @@
     // Estado y modelos
     'No connection': 'Sin conexión',
     'No models': 'Sin modelos',
-    'Loading…': 'Cargando…',
     'model context tokens': 'tokens de contexto del modelo',
     'Vision (images)': 'Visión (imágenes)',
     'Audio': 'Audio',
@@ -161,7 +165,6 @@
     'Hello, this is a voice test.': 'Hola, esto es una prueba de voz.',
     'Loading system voices…': 'Cargando voces del sistema…',
     "Couldn't load system voices.": 'No se pudieron cargar las voces del sistema.',
-    'Retry': 'Reintentar',
     'Dismiss': 'Descartar',
     'Speech synthesis is not available in this environment.': 'La síntesis de voz no está disponible en este entorno.',
     'Audio playback is not available in this environment.': 'La reproducción de audio no está disponible en este entorno.',

@@ -85,11 +85,11 @@ body.models-browser { padding: 0; margin: 0; height: 100vh; overflow: hidden; }
   border: 1px solid var(--vscode-inputValidation-warningBorder, var(--vscode-charts-yellow, #e2c08d));
 }
 .mb-reco b { font-family: var(--vscode-editor-font-family, monospace); }
-.mb-dl, #mb-cancel, #mb-use {
+.mb-dl {
   margin-left: auto; padding: 5px 14px; border: none; border-radius: 6px; cursor: pointer;
   background: var(--vscode-button-background); color: var(--vscode-button-foreground); font-size: 12px;
 }
-.mb-dl:hover, #mb-cancel:hover, #mb-use:hover { background: var(--vscode-button-hoverBackground); }
+.mb-dl:hover { background: var(--vscode-button-hoverBackground); }
 .mb-pbtn {
   margin-left: 10px; padding: 4px 12px; border: none; border-radius: 6px; cursor: pointer;
   background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
@@ -136,17 +136,6 @@ body.models-browser { padding: 0; margin: 0; height: 100vh; overflow: hidden; }
 
 /* Barra de filtros */
 #mb-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 10px 6px; }
-.mb-chips { display: inline-flex; gap: 6px; }
-.mb-chip {
-  font-size: 11px; padding: 3px 10px; border-radius: 999px; cursor: pointer;
-  border: 1px solid var(--vscode-panel-border); background: transparent; color: var(--vscode-foreground);
-  opacity: .8;
-}
-.mb-chip:hover { opacity: 1; }
-.mb-chip.on {
-  background: var(--vscode-button-background); color: var(--vscode-button-foreground);
-  border-color: var(--vscode-button-background); opacity: 1;
-}
 .mb-select-sm {
   padding: 4px 8px; border-radius: 6px; font-size: 12px;
   background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground);

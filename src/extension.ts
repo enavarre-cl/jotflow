@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import * as https from 'https';
 import * as cp from 'child_process';
 import * as crypto from 'crypto';
 import { buildProvider, chatDefaults, providerInfo, isProviderId, setApiKeyOverride, setManagedOllamaBaseUrl, ChatMessage, ProviderId } from './providers';
@@ -25,122 +24,13 @@ import { wavData, concatWavs, splitForTTS } from './audio';
 import { initProxy } from './http';
 import { tr, resolvedLang } from './i18n';
 import { registerCompare } from './compareView';
+import { SpellWordsStore, SpellLang } from './spellWords';
+import { openDictionaryPanel } from './dictionaryPanel';
+import { removePiperVoice } from './piperVoices';
+import { PiperManager } from './piper/manager';
 
 // Hub de tools (filesystem nativo + servidores MCP), compartido por todos los chats.
 const toolHub = new ToolHub();
-
-// Release del binario Piper standalone y nombre del asset por plataforma/arquitectura.
-const PIPER_RELEASE = '2023.11.14-2';
-// SHA256 pineado de cada tarball del binario standalone (GitHub release, bytes inmutables).
-const PIPER_ASSET_SHA256: Record<string, string> = {
-  'piper_macos_aarch64.tar.gz': '6b1eb03b3735946cb35216e063e7eebcc33a6bbf5dd96ec0217959bf1cdcb0cc',
-  'piper_macos_x64.tar.gz': 'ced85c0a3df13945b1e623b878a48fdc2854d5c485b4b67f62857cf551deaf8b',
-  'piper_linux_x86_64.tar.gz': 'a50cb45f355b7af1f6d758c1b360717877ba0a398cc8cbe6d2a7a3a26e225992',
-  'piper_linux_aarch64.tar.gz': 'fea0fd2d87c54dbc7078d0f878289f404bd4d6eea6e7444a77835d1537ab88eb',
-};
-// Versión pineada de piper-tts (PyPI). Pinear evita auto-instalar una versión futura no revisada;
-// pip verifica el hash de esta versión contra el índice de PyPI. Súbela a conciencia al revisar releases.
-const PIPER_TTS_VERSION = '1.4.2';
-
-// Python autocontenido (astral-sh/python-build-standalone) para cuando NO hay un Python
-// del sistema compatible. Tarball relocalizable con pip incluido. Checksums pineados.
-const PYTHON_STANDALONE_TAG = '20260610';
-const PYTHON_STANDALONE_VERSION = '3.12.13';
-const PYTHON_STANDALONE_SHA256: Record<string, string> = {
-  'cpython-3.12.13+20260610-aarch64-apple-darwin-install_only.tar.gz': 'e18ddd4c1e8f4a1d6c4590b37f423d76aec734447edc20ed08e93983d95f2132',
-  'cpython-3.12.13+20260610-x86_64-apple-darwin-install_only.tar.gz': 'ba02164e4db381af8c288c0bc1657584a835e9121a0fa2836b0f2e712ff8cdf5',
-  'cpython-3.12.13+20260610-x86_64-unknown-linux-gnu-install_only.tar.gz': 'c218f50baeb2c06a30c2f03db5986b2bad6ab7c8a52faad2d5a59bda0677b93a',
-  'cpython-3.12.13+20260610-aarch64-unknown-linux-gnu-install_only.tar.gz': 'bc74cf1bb517651868342b0619b21eaaf9f94a2022c9c61886dd980e16fb091b',
-  'cpython-3.12.13+20260610-x86_64-pc-windows-msvc-install_only.tar.gz': 'f5e4d9f856567493776f3d1e832c939fbaba5dcbcc5e0492a82ecfceea83b316',
-};
-/** Nombre del asset de Python autocontenido para la plataforma/arch (o null si no hay). */
-function pythonStandaloneAsset(platform: string, arch: string): string | null {
-  const triples: Record<string, string> = {
-    'darwin-arm64': 'aarch64-apple-darwin',
-    'darwin-x64': 'x86_64-apple-darwin',
-    'linux-x64': 'x86_64-unknown-linux-gnu',
-    'linux-arm64': 'aarch64-unknown-linux-gnu',
-    'win32-x64': 'x86_64-pc-windows-msvc',
-  };
-  const triple = triples[`${platform}-${arch}`];
-  return triple ? `cpython-${PYTHON_STANDALONE_VERSION}+${PYTHON_STANDALONE_TAG}-${triple}-install_only.tar.gz` : null;
-}
-function piperAsset(platform: string, arch: string): string | null {
-  if (platform === 'darwin') return arch === 'arm64' ? 'piper_macos_aarch64.tar.gz' : 'piper_macos_x64.tar.gz';
-  if (platform === 'linux') return arch === 'arm64' ? 'piper_linux_aarch64.tar.gz' : 'piper_linux_x86_64.tar.gz';
-  if (platform === 'win32') return 'piper_windows_amd64.zip';
-  return null;
-}
-
-
-// SHA256 pineado del modelo .onnx de cada voz curada (de huggingface.co/rhasspy/piper-voices,
-// vía `lfs.oid`). Verificar tras descargar protege contra corrupción y contra un origen alterado.
-const PIPER_VOICE_SHA256: Record<string, string> = {
-  'es_MX-claude-high': '3ef40a71ea63852cd8ab7e6fa7d2ecdcfa67a0b47c9c48e3f10e02ee02083ea0',
-  'es_AR-daniela-high': '7ceb1fc0dab349418c5b54a639ae9ee595212d7c9ea422220d8419163d5cc985',
-  'es_ES-sharvard-medium': '40febfb1679c69a4505ff311dc136e121e3419a13a290ef264fdf43ddedd0fb1',
-  'en_US-amy-medium': 'b3a6e47b57b8c7fbe6a0ce2518161a50f59a9cdd8a50835c02cb02bdd6206c18',
-  'en_US-hfc_female-medium': '914c473788fc1fa8b63ace1cdcdb44588f4ae523d3ab37df1536616835a140b7',
-  'en_GB-jenny_dioco-medium': '469c630d209e139dd392a66bf4abde4ab86390a0269c1e47b4e5d7ce81526b01',
-};
-
-/** SHA256 (hex) de un archivo. */
-function sha256File(p: string): string {
-  return crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
-}
-
-/** Deriva las URLs de HuggingFace de una voz Piper a partir de su id (lang_REGION-name-quality). */
-function piperVoiceUrls(id: string): { onnx: string; json: string } {
-  const [region, name, quality] = id.split('-');
-  const lang = region.split('_')[0];
-  const base = `https://huggingface.co/rhasspy/piper-voices/resolve/main/${lang}/${region}/${name}/${quality}/${id}`;
-  return { onnx: base + '.onnx', json: base + '.onnx.json' };
-}
-
-/** Descarga `url` a `destPath` siguiendo redirecciones (HF redirige a su CDN). */
-function downloadFile(url: string, destPath: string, redirects = 6): Promise<void> {
-  return new Promise((resolve, reject) => {
-    // Parsea la URL a opciones explícitas: evita ambigüedades del overload get(string, options, cb).
-    let u: URL;
-    try { u = new URL(url); } catch { return reject(new Error('Invalid URL: ' + url)); }
-    const opts = {
-      protocol: u.protocol,
-      hostname: u.hostname,
-      port: u.port || undefined,
-      path: u.pathname + u.search,
-      headers: { 'User-Agent': 'lang-chat', Accept: '*/*' },
-    };
-    const req = https
-      .get(opts, (res: any) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          res.resume();
-          if (redirects <= 0) return reject(new Error('too many redirects'));
-          // El header `location` puede ser relativo: resuélvelo contra la URL actual.
-          const loc = Array.isArray(res.headers.location) ? res.headers.location[0] : res.headers.location;
-          let next: string;
-          try { next = new URL(loc, url).toString(); } catch { return reject(new Error('bad redirect: ' + loc)); }
-          return resolve(downloadFile(next, destPath, redirects - 1));
-        }
-        if (res.statusCode !== 200) {
-          res.resume();
-          return reject(new Error('HTTP ' + res.statusCode));
-        }
-        const tmp = destPath + '.part';
-        const file = fs.createWriteStream(tmp);
-        // Limpia el `.part` en CUALQUIER fallo (res o file), no solo en error de escritura.
-        const fail = (e: any) => { try { file.destroy(); } catch { /* nada */ } try { fs.unlinkSync(tmp); } catch { /* nada */ } reject(e); };
-        res.on('error', fail);
-        file.on('error', fail);
-        res.pipe(file);
-        file.on('finish', () => file.close(() => {
-          try { fs.renameSync(tmp, destPath); resolve(); } catch (e) { reject(e); }
-        }));
-      })
-      .on('error', reject);
-    // Timeout de inactividad: si la conexión se cuelga sin enviar datos, aborta en vez de esperar eternamente.
-    req.setTimeout(60000, () => req.destroy(new Error('download timeout')));
-  });
-}
 
 // Backends que usan API key (Ollama no). El secret se guarda como `langChat.<id>.apiKey`.
 const KEY_PROVIDERS: { id: ProviderId; label: string }[] = [
@@ -166,7 +56,10 @@ function localModelHfId(name?: string): string | undefined {
 }
 
 export function activate(context: vscode.ExtensionContext) {
-  const provider = new ChatEditorProvider(context);
+  const spellWords = new SpellWordsStore(context);
+  context.subscriptions.push(spellWords);
+  const piper = new PiperManager(context);
+  const provider = new ChatEditorProvider(context, spellWords, piper);
 
   registerCompare(context); // comando de comparación de versiones (Timeline / paleta)
 
@@ -184,6 +77,10 @@ export function activate(context: vscode.ExtensionContext) {
       supportsMultipleEditorsPerDocument: false,
     }),
     vscode.commands.registerCommand('langChat.new', () => createNewChat()),
+    vscode.commands.registerCommand('langChat.spell.openDictionary', (item: any) => {
+      const lang = item?.word === 'en' ? 'en' : 'es'; // el nodo lleva el idioma en `word`
+      openDictionaryPanel(context, spellWords, lang);
+    }),
     vscode.commands.registerCommand('langChat.setApiKey', async () => {
       const pick = await vscode.window.showQuickPick(
         KEY_PROVIDERS.map((p) => ({ label: p.label, id: p.id })),
@@ -228,7 +125,8 @@ export function activate(context: vscode.ExtensionContext) {
     context.globalState,
     path.join(context.globalStorageUri.fsPath, 'imports')
   );
-  const modelsTree = new ModelsTreeProvider(ollama, downloads);
+  const piperVoicesDir = vscode.Uri.joinPath(context.globalStorageUri, 'piper-voices').fsPath;
+  const modelsTree = new ModelsTreeProvider(ollama, downloads, spellWords, piperVoicesDir, piper);
   // Caché de fichas (sidecar): ver/encolar guarda la info de HF; cancelar/eliminar la borra.
   const cards = new ModelCardCache(path.join(context.globalStorageUri.fsPath, 'model-cards'));
   const panelHooks = {
@@ -237,6 +135,29 @@ export function activate(context: vscode.ExtensionContext) {
       if (ChatEditorProvider.activeApply) { await ChatEditorProvider.activeApply({ provider: 'ollama', model: name }); return true; }
       return false;
     },
+  };
+
+  // Instala/actualiza un motor mostrando progreso. (Ollama "update" = reinstala la versión pineada.)
+  const runEngineTask = async (which: any, action: 'install' | 'update'): Promise<void> => {
+    if (which !== 'ollama' && which !== 'piper') return;
+    const name = which === 'ollama' ? 'Ollama' : 'Piper';
+    const title = (action === 'install' ? tr('Installing engine…') : tr('Updating engine…')) + ` (${name})`;
+    try {
+      await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title }, async (p) => {
+        const notify = (m: string) => p.report({ message: m });
+        if (which === 'ollama') {
+          if (action === 'update') ollama.deleteBinary();
+          await ollama.ensureBinary();
+        } else if (action === 'update') {
+          await piper.update(notify);
+        } else {
+          await piper.install(notify);
+        }
+      });
+    } catch (e: any) {
+      vscode.window.showErrorMessage(`${name}: ${e?.message ?? e}`);
+    }
+    modelsTree.refresh();
   };
 
   context.subscriptions.push(
@@ -261,6 +182,26 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('langChat.models.clearDownloads', () => downloads.clearFinished()),
     vscode.commands.registerCommand('langChat.models.refresh', () => modelsTree.refresh()),
+    vscode.commands.registerCommand('langChat.tts.removeVoice', async (item: any) => {
+      const id = item?.word; // el nodo de voz lleva el id en `word`
+      if (typeof id !== 'string') return;
+      const yes = tr('Delete');
+      const pick = await vscode.window.showWarningMessage(tr('Delete this voice?') + ` (${id})`, { modal: true }, yes);
+      if (pick !== yes) return;
+      removePiperVoice(piperVoicesDir, id);
+      modelsTree.refresh();
+    }),
+    vscode.commands.registerCommand('langChat.engine.install', (item: any) => runEngineTask(item?.word, 'install')),
+    vscode.commands.registerCommand('langChat.engine.update', (item: any) => runEngineTask(item?.word, 'update')),
+    vscode.commands.registerCommand('langChat.engine.delete', async (item: any) => {
+      const which = item?.word;
+      if (which !== 'ollama' && which !== 'piper') return;
+      const name = which === 'ollama' ? 'Ollama' : 'Piper';
+      const yes = tr('Delete');
+      if (await vscode.window.showWarningMessage(tr('Delete this engine?') + ` (${name})`, { modal: true }, yes) !== yes) return;
+      if (which === 'ollama') ollama.deleteBinary(); else piper.delete();
+      modelsTree.refresh();
+    }),
     vscode.commands.registerCommand('langChat.models.startServer', async () => { await needServer(); }),
     vscode.commands.registerCommand('langChat.models.stopServer', () => { ollama.stop(); }),
     vscode.commands.registerCommand('langChat.models.deleteModel', async (item: any) => {
@@ -308,7 +249,11 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
   /** Applier del chat enfocado: la vista de modelos lo usa para "usar este modelo". */
   static activeApply: ((patch: any) => Promise<void>) | undefined;
 
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    private readonly spellWords: SpellWordsStore,
+    private readonly piper: PiperManager
+  ) {}
 
   resolveCustomTextEditor(
     document: vscode.TextDocument,
@@ -398,200 +343,6 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       webview.postMessage({ type: 'lang', lang: resolvedLang(), pref });
     };
 
-    // Asegura un modelo de voz Piper descargado (a globalStorage); devuelve la ruta .onnx.
-    const ensurePiperVoice = async (id: string): Promise<string> => {
-      const dir = vscode.Uri.joinPath(this.context.globalStorageUri, 'piper-voices').fsPath;
-      fs.mkdirSync(dir, { recursive: true });
-      const onnx = path.join(dir, id + '.onnx');
-      const json = path.join(dir, id + '.onnx.json');
-      if (fs.existsSync(onnx) && fs.existsSync(json)) return onnx;
-      const urls = piperVoiceUrls(id);
-      webview.postMessage({ type: 'notice', message: tr('Downloading voice: ') + id + ' …' });
-      if (!fs.existsSync(json)) await downloadFile(urls.json, json);
-      if (!fs.existsSync(onnx)) await downloadFile(urls.onnx, onnx);
-      // Verifica la integridad del modelo contra el SHA256 pineado (voces curadas). Falla cerrado: sin hash pineado, no se usa.
-      const expected = PIPER_VOICE_SHA256[id];
-      if (!expected) { try { fs.unlinkSync(onnx); } catch { /* nada */ } throw new Error(`voz sin SHA256 pineado: ${id}`); }
-      const got = sha256File(onnx);
-      if (got !== expected) {
-        try { fs.unlinkSync(onnx); } catch { /* nada */ }
-        throw new Error(`integridad del modelo fallida (sha256 ${got.slice(0, 12)}… ≠ esperado)`);
-      }
-      return onnx;
-    };
-
-    // Asegura el binario `piper` descargado (a globalStorage) para el SO actual; devuelve su ruta.
-    const ensurePiperBinary = async (): Promise<string> => {
-      const dir = vscode.Uri.joinPath(this.context.globalStorageUri, 'piper-bin').fsPath;
-      const exe = process.platform === 'win32' ? 'piper.exe' : 'piper';
-      const binPath = path.join(dir, 'piper', exe);
-      if (fs.existsSync(binPath)) return binPath;
-      const asset = piperAsset(process.platform, process.arch);
-      if (!asset) throw new Error(`no prebuilt Piper for ${process.platform}/${process.arch}`);
-      fs.mkdirSync(dir, { recursive: true });
-      const archive = path.join(dir, asset);
-      const url = `https://github.com/rhasspy/piper/releases/download/${PIPER_RELEASE}/${asset}`;
-      webview.postMessage({ type: 'notice', message: tr('Downloading the Piper engine (first time only)…') });
-      await downloadFile(url, archive);
-      // Verifica integridad del tarball contra el SHA256 pineado antes de extraer/ejecutar. Falla cerrado: sin hash, no se extrae.
-      const expected = PIPER_ASSET_SHA256[asset];
-      if (!expected) { try { fs.unlinkSync(archive); } catch { /* nada */ } throw new Error(`binario Piper sin SHA256 pineado: ${asset}`); }
-      const got = sha256File(archive);
-      if (got !== expected) {
-        try { fs.unlinkSync(archive); } catch { /* nada */ }
-        throw new Error(`integridad del binario Piper fallida (sha256 ${got.slice(0, 12)}… ≠ esperado)`);
-      }
-      // Extrae (.tar.gz en mac/linux). En estos SO `tar` siempre está disponible.
-      await new Promise<void>((resolve, reject) => {
-        const p = cp.spawn('tar', ['-xzf', archive, '-C', dir]);
-        let err = '';
-        p.stderr?.on('data', (d: any) => { err += d.toString(); });
-        p.on('error', reject);
-        p.on('close', (c: number) => (c === 0 ? resolve() : reject(new Error('tar: ' + (err.trim() || c)))));
-      });
-      try { fs.unlinkSync(archive); } catch { /* nada */ }
-      try { fs.chmodSync(binPath, 0o755); } catch { /* nada */ }
-      if (!fs.existsSync(binPath)) throw new Error('piper binary not found after extract');
-      return binPath;
-    };
-
-    // Ejecuta un comando y resuelve si termina con código 0.
-    const runCmd = (cmd: string, args: string[]): Promise<void> =>
-      new Promise((resolve, reject) => {
-          const p = cp.spawn(cmd, args);
-        let err = '';
-        p.stderr?.on('data', (d: any) => { err += d.toString(); });
-        p.on('error', reject);
-        p.on('close', (c: number) => (c === 0 ? resolve() : reject(new Error(err.trim() || `exit ${c}`))));
-      });
-
-    // Busca un Python compatible con piper-tts (3.9–3.13; 3.14 aún sin wheels de onnxruntime).
-    const findCompatiblePython = (): string | null => {
-      const cands = [
-        'python3.13', 'python3.12', 'python3.11', 'python3.10', 'python3.9',
-        '/opt/homebrew/bin/python3.13', '/opt/homebrew/bin/python3.12', '/opt/homebrew/bin/python3.11',
-        '/usr/local/bin/python3.13', '/usr/local/bin/python3.12', '/usr/bin/python3', 'python3',
-        'py', 'python', // Windows: el launcher `py` o `python` (se filtran por versión 3.9–3.13)
-      ];
-      for (const c of cands) {
-        try {
-          const r = cp.spawnSync(c, ['-c', 'import sys;print(sys.version_info[1])'], { encoding: 'utf8' });
-          if (r.status === 0) {
-            const minor = parseInt((r.stdout || '').trim(), 10);
-            if (minor >= 9 && minor <= 13) return c;
-          }
-        } catch { /* siguiente */ }
-      }
-      return null;
-    };
-
-    // Descarga (si falta) un Python autocontenido a globalStorage; devuelve su ejecutable.
-    const ensureStandalonePython = async (): Promise<string> => {
-      const dir = vscode.Uri.joinPath(this.context.globalStorageUri, 'python').fsPath;
-      const exe = process.platform === 'win32'
-        ? path.join(dir, 'python', 'python.exe')
-        : path.join(dir, 'python', 'bin', 'python3');
-      if (fs.existsSync(exe)) return exe;
-      const asset = pythonStandaloneAsset(process.platform, process.arch);
-      if (!asset) throw new Error(`no hay Python autocontenido para ${process.platform}/${process.arch}`);
-      fs.mkdirSync(dir, { recursive: true });
-      const archive = path.join(dir, asset);
-      const url = `https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_STANDALONE_TAG}/${asset}`;
-      webview.postMessage({ type: 'notice', message: tr('Downloading a self-contained Python (one-time)…') });
-      await downloadFile(url, archive);
-      // Falla cerrado: sin hash pineado para este asset, no se extrae/ejecuta.
-      const expected = PYTHON_STANDALONE_SHA256[asset];
-      if (!expected) { try { fs.unlinkSync(archive); } catch { /* nada */ } throw new Error(`Python autocontenido sin SHA256 pineado: ${asset}`); }
-      const got = sha256File(archive);
-      if (got !== expected) { try { fs.unlinkSync(archive); } catch { /* nada */ } throw new Error('integridad de Python fallida'); }
-      await new Promise<void>((resolve, reject) => {
-        const p = cp.spawn('tar', ['-xzf', archive, '-C', dir]);
-        let err = '';
-        p.stderr?.on('data', (d: any) => { err += d.toString(); });
-        p.on('error', reject);
-        p.on('close', (c: number) => (c === 0 ? resolve() : reject(new Error('tar: ' + (err.trim() || c)))));
-      });
-      try { fs.unlinkSync(archive); } catch { /* nada */ }
-      if (!fs.existsSync(exe)) throw new Error('python no encontrado tras extraer');
-      return exe;
-    };
-
-    // Crea (si falta) un venv con piper-tts y devuelve la ruta a su ejecutable `piper`.
-    const ensurePiperVenv = async (): Promise<string> => {
-      const venvDir = vscode.Uri.joinPath(this.context.globalStorageUri, 'piper-venv').fsPath;
-      const piperBin = path.join(venvDir, process.platform === 'win32' ? 'Scripts' : 'bin', process.platform === 'win32' ? 'piper.exe' : 'piper');
-      if (fs.existsSync(piperBin)) return piperBin;
-      // Independencia: usa SIEMPRE un Python autocontenido propio, aislado del sistema —
-      // inmune a que el usuario rompa su Python, use pyenv/conda, o tenga una versión
-      // incompatible. Solo cae al del sistema si su plataforma no tiene build o falla la descarga.
-      let py: string;
-      try {
-        py = await ensureStandalonePython();
-      } catch (e) {
-        const sys = findCompatiblePython();
-        if (!sys) throw e;
-        py = sys;
-      }
-      const pip = path.join(venvDir, process.platform === 'win32' ? 'Scripts' : 'bin', process.platform === 'win32' ? 'pip.exe' : 'pip');
-      webview.postMessage({ type: 'notice', message: tr('Setting up the Piper engine (one-time, ~1–2 min)…') });
-      fs.mkdirSync(this.context.globalStorageUri.fsPath, { recursive: true });
-      await runCmd(py, ['-m', 'venv', venvDir]);
-      await runCmd(pip, ['install', '--upgrade', 'pip']);
-      await runCmd(pip, ['install', `piper-tts==${PIPER_TTS_VERSION}`]);
-      if (!fs.existsSync(piperBin)) throw new Error('piper not found after install');
-      return piperBin;
-    };
-
-    // Resuelve el binario a usar: ruta explícita > venv pip (fiable) > venv auto > standalone (Linux).
-    let piperSetupPromise: Promise<string> | null = null; // guard de concurrencia del setup (no dos pip install a la vez)
-    const resolvePiperBin = async (cfg: vscode.WorkspaceConfiguration): Promise<string> => {
-      const setting = cfg.get<string>('tts.piperPath', 'piper') || 'piper';
-      if (setting && setting !== 'piper' && fs.existsSync(setting)) return setting;
-      const venvBin = path.join(
-        vscode.Uri.joinPath(this.context.globalStorageUri, 'piper-venv').fsPath,
-        process.platform === 'win32' ? 'Scripts' : 'bin',
-        process.platform === 'win32' ? 'piper.exe' : 'piper'
-      );
-      if (fs.existsSync(venvBin)) return venvBin;
-      // Setup pesado (crear venv / descargar): si ya hay uno en vuelo, reúsalo.
-      if (!piperSetupPromise) {
-        piperSetupPromise = (async () => {
-          try {
-            return await ensurePiperVenv();
-          } catch (e) {
-            // El binario standalone solo funciona en Linux (el de macOS viene sin sus dylibs).
-            if (process.platform === 'linux') return ensurePiperBinary();
-            throw e;
-          }
-        })();
-        const clear = () => { piperSetupPromise = null; };
-        piperSetupPromise.then(clear, clear); // permite reintentar tras fallo; en éxito ya existe el binario
-      }
-      return piperSetupPromise;
-    };
-
-    // Fuerza re-descarga del binario auto-gestionado y de la voz indicada (borra la caché).
-    const updatePiper = async (voice: string): Promise<void> => {
-      // Re-descarga la voz (lo más propenso a cambiar en origen).
-      const isVoice = voice && /^[a-z]{2}_[A-Z]{2}-/.test(voice);
-      if (isVoice) {
-        const vdir = vscode.Uri.joinPath(this.context.globalStorageUri, 'piper-voices').fsPath;
-        try { fs.unlinkSync(path.join(vdir, voice + '.onnx')); } catch { /* nada */ }
-        try { fs.unlinkSync(path.join(vdir, voice + '.onnx.json')); } catch { /* nada */ }
-      }
-      // Actualiza el motor: venv pip → upgrade; standalone → re-descarga.
-      const venvDir = vscode.Uri.joinPath(this.context.globalStorageUri, 'piper-venv').fsPath;
-      const pip = path.join(venvDir, process.platform === 'win32' ? 'Scripts' : 'bin', process.platform === 'win32' ? 'pip.exe' : 'pip');
-      if (fs.existsSync(pip)) {
-        await runCmd(pip, ['install', '--upgrade', `piper-tts==${PIPER_TTS_VERSION}`]);
-      } else {
-        const binDir = vscode.Uri.joinPath(this.context.globalStorageUri, 'piper-bin').fsPath;
-        try { fs.rmSync(binDir, { recursive: true, force: true }); } catch { /* nada */ }
-      }
-      if (isVoice) await ensurePiperVoice(voice);
-      webview.postMessage({ type: 'notice', message: tr('Piper updated.') });
-    };
-
     // TTS neural con Piper: parte el texto en frases y envía cada trozo como WAV en base64.
     // Así suena el primer fragmento enseguida y no se generan WAV gigantes en mensajes largos.
     // `voice` es un id de voz curada (se descarga solo); si está vacío usa la ruta de los ajustes.
@@ -604,10 +355,11 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       tlog(`req#${reqId} recibido (engine=piper, rate=${rate}, voice=${voice || '(setting)'})`);
       // Todos los mensajes TTS llevan el id de petición para que el webview filtre los obsoletos.
       const post = (m: any) => webview.postMessage({ ...m, id: reqId });
+      const notice = (m: string) => webview.postMessage({ type: 'notice', message: m });
       const cfg = vscode.workspace.getConfiguration('langChat');
       let bin: string;
       try {
-        bin = await resolvePiperBin(cfg);
+        bin = await this.piper.resolveBin(cfg, notice);
       } catch (e: any) {
         post({ type: 'ttsError', message: tr('Could not set up Piper: ') + (e?.message ?? e) });
         return;
@@ -616,7 +368,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       let model = '';
       if (voice && /^[a-z]{2}_[A-Z]{2}-/.test(voice)) {
         try {
-          model = await ensurePiperVoice(voice);
+          model = await this.piper.ensureVoice(voice, notice);
         } catch (e: any) {
           post({ type: 'ttsError', message: tr('Could not download voice: ') + (e?.message ?? e) });
           return;
@@ -1300,14 +1052,16 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
         case 'ready':
           pushLang();
           pushDoc();
+          webview.postMessage({ type: 'spellWords', words: await this.spellWords.all() });
           await loadModels();
           break;
-        case 'setLanguage': {
-          const value = msg.value === 'en' || msg.value === 'es' ? msg.value : 'auto';
-          await vscode.workspace.getConfiguration('langChat').update('language', value, vscode.ConfigurationTarget.Global);
-          pushLang();
+        case 'spellAddWord':
+          // Agrega a la lista del idioma activo del corrector. El store dispara onDidChange →
+          // todos los webviews + la vista lateral se actualizan.
+          if (typeof msg.word === 'string' && (msg.lang === 'es' || msg.lang === 'en')) {
+            await this.spellWords.add(msg.lang as SpellLang, msg.word);
+          }
           break;
-        }
         case 'send':
           if (busy) break;
           busy = true;
@@ -1329,7 +1083,12 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
           break;
         case 'ttsUpdate':
           try {
-            await updatePiper(String(msg.voice ?? ''));
+            const voice = String(msg.voice ?? '');
+            const notice = (m: string) => webview.postMessage({ type: 'notice', message: m });
+            const isVoice = !!voice && /^[a-z]{2}_[A-Z]{2}-/.test(voice);
+            if (isVoice) removePiperVoice(vscode.Uri.joinPath(this.context.globalStorageUri, 'piper-voices').fsPath, voice);
+            await this.piper.update(notice);          // actualiza el motor (pip upgrade)
+            if (isVoice) await this.piper.ensureVoice(voice, notice); // re-descarga la voz
           } catch (e: any) {
             webview.postMessage({ type: 'ttsError', message: tr('Could not set up Piper: ') + (e?.message ?? e) });
           }
@@ -1441,11 +1200,6 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
             busy = true;
             try { await handleFork(msg.index, msg.fromHere === true); } finally { busy = false; }
           }
-          break;
-        case 'generate':
-          if (busy) break;
-          busy = true;
-          try { await handleGenerate(); } finally { busy = false; }
           break;
         case 'regenerateFrom': {
           // Regenera la respuesta a un mensaje de usuario: descarta todo lo posterior
@@ -1580,11 +1334,14 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
     setActive(panel.active);
     const onState = panel.onDidChangeViewState(() => setActive(panel.active));
 
+    // Cualquier cambio en el diccionario personal (panel, otro chat) → refresca este webview.
+    const onSpell = this.spellWords.onDidChange(async () => webview.postMessage({ type: 'spellWords', words: await this.spellWords.all() }));
     panel.onDidDispose(() => {
       abort?.abort();
       onMsg.dispose();
       onChange.dispose();
       onState.dispose();
+      onSpell.dispose();
       if (ChatEditorProvider.activeApply === applyConfig) ChatEditorProvider.activeApply = undefined;
     });
   }
@@ -1600,6 +1357,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       `font-src ${webview.cspSource}`,
       `img-src ${webview.cspSource} data: blob:`,
       `media-src ${webview.cspSource} data: blob:`,
+      `connect-src ${webview.cspSource}`, // fetch de los diccionarios del corrector
     ].join('; ');
 
     return /* html */ `<!DOCTYPE html>
@@ -1651,7 +1409,10 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
           <div id="inputBox">
             <div id="emojiPicker" class="hidden"></div>
             <div id="attachments" class="hidden"></div>
-            <textarea id="input" rows="1" spellcheck="true" data-i18n-ph="Type a message…  (Enter to send · Shift+Enter for newline)" placeholder="Type a message…  (Enter to send · Shift+Enter for newline)"></textarea>
+            <div id="inputWrap">
+              <div id="inputBackdrop" aria-hidden="true"></div>
+              <textarea id="input" rows="1" spellcheck="false" data-i18n-ph="Type a message…  (Enter to send · Shift+Enter for newline)" placeholder="Type a message…  (Enter to send · Shift+Enter for newline)"></textarea>
+            </div>
             <div id="inputToolbar">
               <button id="attachBtn" class="icon-btn" data-i18n-title="Attach image or file" title="Attach image or file">${UI.clip}</button>
               <button id="emojiBtn" class="icon-btn" title="Emojis">${UI.smile}</button>
@@ -1690,9 +1451,10 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
               </div>
             </div>
             <div class="cfg-row">
-              <label data-i18n="Language">Language</label>
-              <select id="langSelect" data-i18n-title="Language" title="Language">
-                <option value="auto" data-i18n="Automatic">Automatic</option>
+              <label data-i18n="Spell-check">Spell-check</label>
+              <select id="spellSelect" data-i18n-title="Spell-check language" title="Spell-check language">
+                <option value="auto" data-i18n="Automatic (system)">Automatic (system)</option>
+                <option value="off" data-i18n="Off">Off</option>
                 <option value="en">English</option>
                 <option value="es">Español</option>
               </select>
@@ -1719,8 +1481,14 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       </div>
     </div>
   </div>
+  <script nonce="${nonce}">window.SPELL_DICTS = {
+    es: { aff: '${uri('dict/es.aff')}', dic: '${uri('dict/es.dic')}' },
+    en: { aff: '${uri('dict/en.aff')}', dic: '${uri('dict/en.dic')}' }
+  };</script>
   <script nonce="${nonce}" src="${uri('zoom.js')}"></script>
   <script nonce="${nonce}" src="${uri('i18n.js')}"></script>
+  <script nonce="${nonce}" src="${uri('spell-engine.js')}"></script>
+  <script nonce="${nonce}" src="${uri('spell.js')}"></script>
   <script nonce="${nonce}" src="${uri('main.js')}"></script>
 </body>
 </html>`;
@@ -1787,6 +1555,7 @@ function applyPatch(doc: ChatDoc, patch: any): void {
   }
   if (typeof patch.model === 'string') doc.model = patch.model;
   if (typeof patch.systemPrompt === 'string') doc.systemPrompt = patch.systemPrompt;
+  if (['auto', 'off', 'es', 'en'].includes(patch.spellLang)) doc.spellLang = patch.spellLang;
 
   const p = patch.params;
   if (p && typeof p === 'object') {

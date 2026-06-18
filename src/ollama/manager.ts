@@ -186,6 +186,18 @@ export class OllamaManager {
     if (this.proc) { try { this.proc.kill(); } catch { /* nada */ } this.proc = null; }
   }
 
+  /** ¿El binario propio está descargado? */
+  isInstalled(): boolean {
+    return !!this.findBinary(this.binDir, ollamaBinName(process.platform));
+  }
+
+  /** Detiene el servidor y borra el binario descargado (se re-descarga al volver a arrancar). */
+  deleteBinary(): void {
+    this.stop();
+    try { fs.rmSync(this.binDir, { recursive: true, force: true }); } catch { /* nada */ }
+    this._onChange.fire();
+  }
+
   dispose(): void {
     this.stop();
     this._onChange.dispose();

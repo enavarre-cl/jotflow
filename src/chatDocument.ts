@@ -41,6 +41,7 @@ export interface ChatDoc {
   model: string;
   systemPrompt: string;
   systemPromptFile?: string; // ruta a un .md (relativa al .chat); si existe, prevalece
+  spellLang?: 'auto' | 'off' | 'es' | 'en'; // idioma del corrector (per-chat). Ausente/'auto' = sistema
   params: ChatParams;
   summary?: ChatSummary;
   usage?: TokenUsage; // tokens acumulados del chat
@@ -156,6 +157,7 @@ export function parseDoc(text: string, defaults: ChatDefaults): ChatDoc {
     model: typeof raw.model === 'string' ? raw.model : '',
     systemPrompt: typeof raw.systemPrompt === 'string' ? raw.systemPrompt : base.systemPrompt,
     systemPromptFile: typeof raw.systemPromptFile === 'string' && raw.systemPromptFile ? raw.systemPromptFile : undefined,
+    spellLang: ['auto', 'off', 'es', 'en'].includes(raw.spellLang) ? raw.spellLang : undefined,
     params,
     summary,
     usage,
@@ -236,6 +238,7 @@ export function serializeDoc(doc: ChatDoc): string {
     model: doc.model,
     systemPrompt: doc.systemPrompt,
     systemPromptFile: doc.systemPromptFile,
+    spellLang: doc.spellLang,
     params: {
       temperature: doc.params.temperature,
       maxTokens: doc.params.maxTokens,

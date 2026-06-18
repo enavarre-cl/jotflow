@@ -38,6 +38,8 @@
   const $ = (id) => document.getElementById(id);
   const messagesEl = $('messages');
   const inputEl = $('input');
+  const inputBackdrop = $('inputBackdrop');
+  const spellSelect = $('spellSelect');
   const sendBtn = $('sendBtn');
   const stopBtn = $('stopBtn');
   const modelSelect = $('modelSelect');
@@ -601,24 +603,6 @@
     el.classList.toggle('has-think', !!text);
   }
 
-  // Bloque colapsable para el resultado de una tool.
-  function addToolResult(m, index) {
-    const el = document.createElement('details');
-    el.className = 'tool-result';
-    const sum = document.createElement('summary');
-    sum.innerHTML = ICONS.tool + '<span>' + escapeHtml(m.toolName || 'tool') + '</span>';
-    const del = iconButton(ICONS.trash, t('Delete') + ` · ${t('⇧/Shift: skip confirmation')}`, (e) =>
-      vscode.postMessage({ type: 'deleteMessage', index, confirm: !(e && e.shiftKey) }));
-    del.classList.add('tool-del');
-    sum.appendChild(del);
-    el.appendChild(sum);
-    const pre = document.createElement('pre');
-    pre.textContent = m.content;
-    el.appendChild(pre);
-    messagesEl.appendChild(el);
-    scrollDown();
-  }
-
   // Edición inline del contenido de un mensaje.
   function startEditInline(el, index) {
     if (el.querySelector('.edit-wrap')) return; // ya editando
@@ -1080,13 +1064,6 @@
     return row;
   }
 
-  function textInput(value, onChange) {
-    const i = document.createElement('input');
-    i.type = 'text'; i.value = value;
-    i.addEventListener('change', () => onChange(i.value));
-    return i;
-  }
-
   function paramRow(item) {
     const p = doc.params || {};
     const row = document.createElement('div');
@@ -1471,6 +1448,7 @@
     if (doc) doc.messages.push({ role: 'user', content: text, attachments });
     inputEl.value = '';
     inputEl.style.height = 'auto';
+    renderSpell(); // limpia el subrayado del overlay
     pending = [];
     renderPending();
     setStreaming(true); // bloquea reenvíos hasta streamEnd/error
@@ -1487,7 +1465,132 @@
   inputEl.addEventListener('input', () => {
     inputEl.style.height = 'auto';
     inputEl.style.height = Math.min(inputEl.scrollHeight, window.innerHeight * 0.4) + 'px';
+    scheduleSpell();
   });
+  inputEl.addEventListener('scroll', () => { if (inputBackdrop) inputBackdrop.scrollTop = inputEl.scrollTop; });
+
+  // ---- Corrector ortográfico (subrayado en vivo vía overlay; motor nspell en spell.js) ----
+  const WORD_RE = /[\p{L}\p{M}]+/gu; // palabras (letras + marcas/diacríticos); ignora números/símbolos
+  let spellTimer = null;
+
+  // Idioma efectivo del corrector según el selector per-chat: 'auto' → idioma del sistema.
+  function spellEffective() {
+    const pref = spellSelect ? spellSelect.value : 'auto';
+    if (pref === 'off') return null;
+    if (pref === 'es' || pref === 'en') return pref;
+    const sys = (navigator.language || '').toLowerCase();
+    return sys.startsWith('es') ? 'es' : sys.startsWith('en') ? 'en' : null; // otros idiomas: sin corrector
+  }
+
+  function applySpellLang() {
+    if (window.LangSpell) window.LangSpell.setLang(spellEffective());
+    renderSpell();
+  }
+
+  // Reconstruye la capa de fondo con las palabras mal escritas subrayadas.
+  function renderSpell() {
+    if (!inputBackdrop) return;
+    const text = inputEl.value;
+    if (!window.LangSpell || !window.LangSpell.ready()) { inputBackdrop.textContent = ''; return; }
+    let html = '', last = 0, m;
+    WORD_RE.lastIndex = 0;
+    while ((m = WORD_RE.exec(text))) {
+      const w = m[0];
+      html += escapeHtml(text.slice(last, m.index));
+      html += window.LangSpell.correct(w) ? escapeHtml(w) : '<span class="sp-err">' + escapeHtml(w) + '</span>';
+      last = m.index + w.length;
+    }
+    html += escapeHtml(text.slice(last));
+    inputBackdrop.innerHTML = html;
+    inputBackdrop.scrollTop = inputEl.scrollTop;
+  }
+
+  function scheduleSpell() {
+    if (spellTimer) clearTimeout(spellTimer);
+    spellTimer = setTimeout(renderSpell, 250);
+  }
+
+  if (window.LangSpell) window.LangSpell.onReady(renderSpell);
+  if (spellSelect) {
+    spellSelect.addEventListener('change', () => {
+      patchConfig({ spellLang: spellSelect.value });
+      applySpellLang();
+    });
+  }
+
+  // Palabra (rango) que contiene/toca el offset `pos` en `text`.
+  function wordAt(text, pos) {
+    WORD_RE.lastIndex = 0;
+    let m;
+    while ((m = WORD_RE.exec(text))) {
+      if (pos >= m.index && pos <= m.index + m[0].length) return { text: m[0], start: m.index, end: m.index + m[0].length };
+      if (m.index > pos) break;
+    }
+    return null;
+  }
+
+  // Menú flotante de sugerencias.
+  let spellMenu = null;
+  function closeSpellMenu() { if (spellMenu) { spellMenu.remove(); spellMenu = null; } }
+  function showSpellMenu(x, y, word, suggestions) {
+    closeSpellMenu();
+    spellMenu = document.createElement('div');
+    spellMenu.id = 'spellMenu';
+    if (suggestions.length) {
+      for (const s of suggestions) {
+        const it = document.createElement('div');
+        it.className = 'sp-item';
+        it.textContent = s;
+        it.addEventListener('mousedown', (ev) => {
+          ev.preventDefault();
+          const v = inputEl.value;
+          inputEl.value = v.slice(0, word.start) + s + v.slice(word.end);
+          const caret = word.start + s.length;
+          inputEl.setSelectionRange(caret, caret);
+          inputEl.dispatchEvent(new Event('input'));
+          inputEl.focus();
+          closeSpellMenu();
+        });
+        spellMenu.appendChild(it);
+      }
+    } else {
+      const none = document.createElement('div');
+      none.className = 'sp-none';
+      none.textContent = t('No suggestions');
+      spellMenu.appendChild(none);
+    }
+    const sep = document.createElement('div');
+    sep.className = 'sp-sep';
+    spellMenu.appendChild(sep);
+    const add = document.createElement('div');
+    add.className = 'sp-item';
+    add.textContent = '➕ ' + t('Add to dictionary');
+    add.addEventListener('mousedown', (ev) => {
+      ev.preventDefault();
+      const lang = window.LangSpell ? window.LangSpell.lang() : null; // idioma activo del corrector
+      if (window.LangSpell) window.LangSpell.add(word.text);   // efecto inmediato
+      vscode.postMessage({ type: 'spellAddWord', word: word.text, lang }); // persiste por idioma
+      renderSpell();
+      closeSpellMenu();
+      inputEl.focus();
+    });
+    spellMenu.appendChild(add);
+    document.body.appendChild(spellMenu);
+    // Encaja en pantalla.
+    const r = spellMenu.getBoundingClientRect();
+    spellMenu.style.left = Math.min(x, window.innerWidth - r.width - 8) + 'px';
+    spellMenu.style.top = Math.min(y, window.innerHeight - r.height - 8) + 'px';
+  }
+
+  inputEl.addEventListener('contextmenu', (e) => {
+    if (!window.LangSpell || !window.LangSpell.ready()) return; // sin corrector: menú nativo
+    const word = wordAt(inputEl.value, inputEl.selectionStart);
+    if (!word || window.LangSpell.correct(word.text)) { closeSpellMenu(); return; }
+    e.preventDefault();
+    showSpellMenu(e.clientX, e.clientY, word, window.LangSpell.suggest(word.text));
+  });
+  document.addEventListener('mousedown', (e) => { if (spellMenu && !spellMenu.contains(e.target)) closeSpellMenu(); });
+  window.addEventListener('blur', closeSpellMenu);
   // Pegar imágenes (Ctrl+V) directamente en el chat.
   inputEl.addEventListener('paste', (e) => {
     const items = (e.clipboardData && e.clipboardData.items) || [];
@@ -1775,9 +1878,6 @@
     renderConfig(); // re-filtra los parámetros según el nuevo backend
   });
   modelSelect.addEventListener('change', () => { updateModelCtx(); patchConfig({ model: modelSelect.value }); });
-  $('langSelect').addEventListener('change', () => {
-    vscode.postMessage({ type: 'setLanguage', value: $('langSelect').value });
-  });
   $('refreshBtn').addEventListener('click', () => vscode.postMessage({ type: 'refreshModels' }));
   $('settingsBtn').addEventListener('click', () => vscode.postMessage({ type: 'openSettings' }));
   $('configBtn').addEventListener('click', () => { configPanel.classList.toggle('hidden'); updateSide(); });
@@ -1910,7 +2010,6 @@
   function applyLanguage(lang, pref) {
     window.LangI18n.set(lang);
     window.LangI18n.applyStatic(document);
-    if (pref) $('langSelect').value = pref;
     document.documentElement.lang = lang;
     if (doc) { renderConfig(); renderConversation(); updateUsage(); updateContextBar(); }
     updateModelCtx(); // refresca tooltips de capacidades/contexto + estado
@@ -1923,9 +2022,14 @@
       case 'lang':
         applyLanguage(msg.lang, msg.pref);
         break;
+      case 'spellWords':
+        if (window.LangSpell) window.LangSpell.setWords(msg.words || []);
+        break;
       case 'doc':
         doc = msg.doc;
         providerSelect.value = doc.provider;
+        if (spellSelect) spellSelect.value = doc.spellLang || 'auto'; // idioma del corrector per-chat
+        applySpellLang();
         renderConfig();
         renderConversation();
         updateContextBar();

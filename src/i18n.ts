@@ -9,6 +9,19 @@ export function resolvedLang(): 'en' | 'es' {
 }
 
 const BACKEND_ES: Record<string, string> = {
+  // Corrector — diccionario personal
+  'Dictionary': 'Diccionario',
+  'Personal dictionary': 'Diccionario personal',
+  'Words you add here stop being marked as misspelled. The base dictionary is not affected.':
+    'Las palabras que agregues aquí dejan de marcarse como error. El diccionario base no se altera.',
+  'Add a word…': 'Agregar una palabra…',
+  'Add': 'Agregar',
+  'No words yet.': 'Aún no hay palabras.',
+  'Remove': 'Quitar',
+  // Voces Piper (TTS)
+  'Voices': 'Voces',
+  'No voices downloaded': 'Sin voces descargadas',
+  'Delete this voice?': '¿Borrar esta voz?',
   // Comparación de versiones
   'Compare': 'Comparar',
   'Compare: ': 'Comparar: ',
@@ -43,7 +56,6 @@ const BACKEND_ES: Record<string, string> = {
   'fork': 'bifurcación',
   'Set the Piper voice model path in settings (langChat.tts.piperModel).':
     'Configura la ruta del modelo de voz Piper en los ajustes (langChat.tts.piperModel).',
-  'Could not run Piper: ': 'No se pudo ejecutar Piper: ',
   'Piper failed: ': 'Piper falló: ',
   'Downloading voice: ': 'Descargando voz: ',
   'Could not download voice: ': 'No se pudo descargar la voz: ',
@@ -54,12 +66,17 @@ const BACKEND_ES: Record<string, string> = {
   'Could not set up Piper: ': 'No se pudo preparar Piper: ',
   'Piper updated.': 'Piper actualizado.',
 
+  // Engines (motores)
+  'Engines': 'Motores',
+  'running': 'en ejecución',
+  'stopped': 'detenido',
+  'starting…': 'arrancando…',
+  'not installed': 'no instalado',
+  'installed': 'instalado',
+  'Installing engine…': 'Instalando motor…',
+  'Updating engine…': 'Actualizando motor…',
+  'Delete this engine?': '¿Borrar este motor?',
   // Modelos locales — árbol
-  'Server: stopped': 'Servidor: detenido',
-  'Server: downloading…': 'Servidor: descargando…',
-  'Server: starting…': 'Servidor: arrancando…',
-  'Server: ready': 'Servidor: listo',
-  'Server: error': 'Servidor: error',
   'Local models': 'Modelos locales',
   'Start the server to see the models': 'Arranca el servidor para ver los modelos',
   'Error: ': 'Error: ',
@@ -93,7 +110,6 @@ const BACKEND_ES: Record<string, string> = {
   'Download anyway': 'Descargar igual',
   'Using': 'Usando en el chat',
   'Open a chat and select the Ollama provider to use': 'Abre un chat y selecciona el provider Ollama para usar',
-  'Downloaded model: ': 'Modelo descargado: ',
   // Comando setApiKey
   'Backend for the API key': 'Backend para la API key',
   'API key for': 'API key de',

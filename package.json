@@ -102,6 +102,35 @@
         "title": "%cmd.compareVersion.title%",
         "category": "Lang Chat",
         "icon": "$(git-compare)"
+      },
+      {
+        "command": "langChat.spell.openDictionary",
+        "title": "%cmd.spell.openDictionary.title%",
+        "category": "Lang Chat"
+      },
+      {
+        "command": "langChat.tts.removeVoice",
+        "title": "%cmd.tts.removeVoice.title%",
+        "category": "Lang Chat",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "langChat.engine.install",
+        "title": "%cmd.engine.install.title%",
+        "category": "Lang Chat",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "langChat.engine.update",
+        "title": "%cmd.engine.update.title%",
+        "category": "Lang Chat",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "langChat.engine.delete",
+        "title": "%cmd.engine.delete.title%",
+        "category": "Lang Chat",
+        "icon": "$(trash)"
       }
     ],
     "viewsContainers": {
@@ -137,13 +166,28 @@
       "view/item/context": [
         {
           "command": "langChat.models.startServer",
-          "when": "view == langChat.models && viewItem =~ /ollamaServer\\.(stopped|error)/",
-          "group": "inline"
+          "when": "view == langChat.models && viewItem == engine.ollama.stopped",
+          "group": "inline@1"
         },
         {
           "command": "langChat.models.stopServer",
-          "when": "view == langChat.models && viewItem == ollamaServer.ready",
-          "group": "inline"
+          "when": "view == langChat.models && viewItem == engine.ollama.running",
+          "group": "inline@1"
+        },
+        {
+          "command": "langChat.engine.install",
+          "when": "view == langChat.models && viewItem =~ /engine\\.(ollama|piper)\\.notinstalled/",
+          "group": "inline@1"
+        },
+        {
+          "command": "langChat.engine.update",
+          "when": "view == langChat.models && viewItem =~ /engine\\.(ollama\\.(stopped|running)|piper\\.installed)/",
+          "group": "inline@2"
+        },
+        {
+          "command": "langChat.engine.delete",
+          "when": "view == langChat.models && viewItem =~ /engine\\.(ollama\\.(stopped|running)|piper\\.installed)/",
+          "group": "inline@3"
         },
         {
           "command": "langChat.models.add",
@@ -179,6 +223,16 @@
           "command": "langChat.models.openModelFromDownload",
           "when": "view == langChat.models && viewItem =~ /ollamaDownload\\./",
           "group": "navigation"
+        },
+        {
+          "command": "langChat.spell.openDictionary",
+          "when": "view == langChat.models && viewItem == spellDictLang",
+          "group": "inline"
+        },
+        {
+          "command": "langChat.tts.removeVoice",
+          "when": "view == langChat.models && viewItem == piperVoice",
+          "group": "inline"
         }
       ],
       "timeline/item/context": [
@@ -199,6 +253,26 @@
         {
           "command": "langChat.compareVersion",
           "when": "resourceExtname == .chat"
+        },
+        {
+          "command": "langChat.spell.openDictionary",
+          "when": "false"
+        },
+        {
+          "command": "langChat.tts.removeVoice",
+          "when": "false"
+        },
+        {
+          "command": "langChat.engine.install",
+          "when": "false"
+        },
+        {
+          "command": "langChat.engine.update",
+          "when": "false"
+        },
+        {
+          "command": "langChat.engine.delete",
+          "when": "false"
         }
       ]
     },
@@ -435,14 +509,19 @@
     "watch": "tsc -watch -p ./",
     "test": "npm run compile && node --test out/test/*.test.js",
     "lint": "eslint src",
-    "package": "vsce package"
+    "package": "vsce package",
+    "build:spell": "node -e \"const fs=require('fs');fs.mkdirSync('media/dict',{recursive:true});for(const [l,p] of [['es','dictionary-es'],['en','dictionary-en']]){fs.copyFileSync(require.resolve(p+'/index.aff'),'media/dict/'+l+'.aff');fs.copyFileSync(require.resolve(p+'/index.dic'),'media/dict/'+l+'.dic');}fs.writeFileSync('media/_spell-entry.js','const nspell=require(\\'nspell\\');if(typeof window!==\\'undefined\\')window.nspell=nspell;');\" && esbuild media/_spell-entry.js --bundle --format=iife --outfile=media/spell-engine.js && node -e \"require('fs').unlinkSync('media/_spell-entry.js')\""
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^8.61.0",
     "@typescript-eslint/parser": "^8.61.0",
+    "dictionary-en": "^4.0.0",
+    "dictionary-es": "^4.0.0",
+    "esbuild": "^0.28.1",
     "eslint": "^10.5.0",
+    "nspell": "^2.1.5",
     "typescript": "^5.4.0"
   },
   "icon": "media/icon.png",
