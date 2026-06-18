@@ -91,18 +91,24 @@ export class OllamaManager {
     fs.mkdirSync(this.binDir, { recursive: true });
     const archive = path.join(this.binDir, asset);
     this.set('downloading', asset);
-    await downloadFile(ollamaAssetUrl(asset), archive, { onProgress });
-    const got = sha256File(archive);
-    if (got !== expected) {
+    try {
+      await downloadFile(ollamaAssetUrl(asset), archive, { onProgress });
+      const got = sha256File(archive);
+      if (got !== expected) {
+        try { fs.unlinkSync(archive); } catch { /* nada */ }
+        throw new Error(`integridad de Ollama fallida (sha256 ${got.slice(0, 12)}… ≠ esperado)`);
+      }
+      await extract(archive, this.binDir, assetFormat(asset));
       try { fs.unlinkSync(archive); } catch { /* nada */ }
-      throw new Error(`integridad de Ollama fallida (sha256 ${got.slice(0, 12)}… ≠ esperado)`);
+      const bin = this.findBinary(this.binDir, binName);
+      if (!bin) throw new Error('no se encontró el binario ollama tras extraer');
+      if (process.platform !== 'win32') { try { fs.chmodSync(bin, 0o755); } catch { /* nada */ } }
+      return bin;
+    } finally {
+      // No dejar el estado pegado en 'downloading' al instalar fuera de start()
+      // (start() pone 'starting'/'ready' justo después y lo sobreescribe).
+      if (this._status === 'downloading') this.set(this.proc ? 'ready' : 'stopped');
     }
-    await extract(archive, this.binDir, assetFormat(asset));
-    try { fs.unlinkSync(archive); } catch { /* nada */ }
-    const bin = this.findBinary(this.binDir, binName);
-    if (!bin) throw new Error('no se encontró el binario ollama tras extraer');
-    if (process.platform !== 'win32') { try { fs.chmodSync(bin, 0o755); } catch { /* nada */ } }
-    return bin;
   }
 
   /** Espera a que el servidor responda /api/version (o lanza al agotar el tiempo). */
