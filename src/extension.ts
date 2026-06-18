@@ -8,7 +8,7 @@ import { buildProvider, chatDefaults, providerInfo, isProviderId, setApiKeyOverr
 import { OllamaManager } from './ollama/manager';
 import { DownloadManager } from './ollama/downloads';
 import { ModelCardCache } from './ollama/cards';
-import { ModelsTreeProvider } from './modelsView';
+import { ModelsTreeProvider, Section } from './modelsView';
 import { ModelsPanel } from './modelsPanel';
 import { remove as removeModel } from './ollama/registry';
 import {
@@ -126,16 +126,22 @@ export function activate(context: vscode.ExtensionContext) {
   const downloads = new DownloadManager(
     () => needServer(),
     (name, modelPath, projPath) => ollama.create(name, modelPath, projPath),
-    () => modelsTree.refresh(),
+    () => refreshTrees(),
     context.globalState,
     path.join(context.globalStorageUri.fsPath, 'imports')
   );
   const piperVoicesDir = vscode.Uri.joinPath(context.globalStorageUri, 'piper-voices').fsPath;
-  const modelsTree = new ModelsTreeProvider(ollama, downloads, spellWords, piperVoicesDir, piper);
+  // Una vista (TreeProvider) por sección → VS Code les da el encabezado sombreado nativo.
+  const mkTree = (s: Section) => new ModelsTreeProvider(ollama, downloads, spellWords, piperVoicesDir, piper, s, voicesChanged.event);
+  const treeEngines = mkTree('engines');
+  const treeModels = mkTree('models'); // incluye Local models + Downloads (árbol)
+  const treeVoices = mkTree('voices');
+  const treeDict = mkTree('dictionary');
+  const refreshTrees = (): void => { treeEngines.refresh(); treeModels.refresh(); treeVoices.refresh(); treeDict.refresh(); };
   // Caché de fichas (sidecar): ver/encolar guarda la info de HF; cancelar/eliminar la borra.
   const cards = new ModelCardCache(path.join(context.globalStorageUri.fsPath, 'model-cards'));
   const panelHooks = {
-    onChanged: () => modelsTree.refresh(),
+    onChanged: () => refreshTrees(),
     useModel: async (name: string) => {
       if (ChatEditorProvider.activeApply) { await ChatEditorProvider.activeApply({ provider: 'ollama', model: name }); return true; }
       return false;
@@ -156,14 +162,17 @@ export function activate(context: vscode.ExtensionContext) {
     } catch (e: any) {
       vscode.window.showErrorMessage(`${name}: ${e?.message ?? e}`);
     }
-    modelsTree.refresh();
+    refreshTrees();
   };
 
   context.subscriptions.push(
     ollama,
     downloads,
     piper, // dispose() apaga el daemon HTTP al desactivar la extensión
-    vscode.window.registerTreeDataProvider('langChat.models', modelsTree),
+    vscode.window.registerTreeDataProvider('langChat.engines', treeEngines),
+    vscode.window.registerTreeDataProvider('langChat.models', treeModels),
+    vscode.window.registerTreeDataProvider('langChat.voices', treeVoices),
+    vscode.window.registerTreeDataProvider('langChat.dictionary', treeDict),
     vscode.commands.registerCommand('langChat.models.add', () => ModelsPanel.show(context, ollama, downloads, cards, panelHooks)),
     vscode.commands.registerCommand('langChat.models.openModelFromDownload', (item: any) => {
       const modelId = item?.download?.modelId;
@@ -181,9 +190,9 @@ export function activate(context: vscode.ExtensionContext) {
       if (item?.download) { cards.remove(item.download.modelId); downloads.remove(item.download.id); }
     }),
     vscode.commands.registerCommand('langChat.models.clearDownloads', () => downloads.clearFinished()),
-    vscode.commands.registerCommand('langChat.models.refresh', () => modelsTree.refresh()),
+    vscode.commands.registerCommand('langChat.models.refresh', () => refreshTrees()),
     vscode.commands.registerCommand('langChat.tts.openVoices', () => {
-      openVoicesPanel(context, piper, piperVoicesDir, () => { modelsTree.refresh(); voicesChanged.fire(); });
+      openVoicesPanel(context, piper, piperVoicesDir, () => { refreshTrees(); voicesChanged.fire(); });
     }),
     vscode.commands.registerCommand('langChat.tts.startServer', async () => {
       const model = piper.firstVoiceModel();
@@ -203,7 +212,7 @@ export function activate(context: vscode.ExtensionContext) {
       const pick = await vscode.window.showWarningMessage(tr('Delete this voice?') + ` (${id})`, { modal: true }, yes);
       if (pick !== yes) return;
       removePiperVoice(piperVoicesDir, id);
-      modelsTree.refresh();
+      refreshTrees();
       voicesChanged.fire();
     }),
     vscode.commands.registerCommand('langChat.engine.install', (item: any) => runEngineTask(item?.word)),
@@ -214,7 +223,7 @@ export function activate(context: vscode.ExtensionContext) {
       const yes = tr('Delete');
       if (await vscode.window.showWarningMessage(tr('Delete this engine?') + ` (${name})`, { modal: true }, yes) !== yes) return;
       if (which === 'ollama') { ollama.deleteBinary(); cards.clear(); } else { piper.delete(); voicesChanged.fire(); }
-      modelsTree.refresh();
+      refreshTrees();
     }),
     vscode.commands.registerCommand('langChat.models.startServer', async () => { await needServer(); }),
     vscode.commands.registerCommand('langChat.models.stopServer', () => { ollama.stop(); }),
@@ -223,7 +232,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (!name || !baseUrl) return;
       const ok = await vscode.window.showWarningMessage(`${tr('Delete the model')} ${name}?`, { modal: true }, tr('Delete'));
       if (ok !== tr('Delete')) return;
-      try { await removeModel(baseUrl, name); modelsTree.refresh(); }
+      try { await removeModel(baseUrl, name); refreshTrees(); }
       catch (e: any) { vscode.window.showErrorMessage(`${tr('Could not delete: ')}${e?.message || e}`); }
     }),
     vscode.commands.registerCommand('langChat.models.openLocalModel', (item: any) => {

@@ -157,8 +157,20 @@
     "views": {
       "langChat": [
         {
+          "id": "langChat.engines",
+          "name": "%view.engines.name%"
+        },
+        {
           "id": "langChat.models",
           "name": "%view.models.name%"
+        },
+        {
+          "id": "langChat.voices",
+          "name": "%view.voices.name%"
+        },
+        {
+          "id": "langChat.dictionary",
+          "name": "%view.dictionary.name%"
         }
       ]
     },
@@ -173,43 +185,43 @@
           "command": "langChat.models.refresh",
           "when": "view == langChat.models",
           "group": "navigation@2"
+        },
+        {
+          "command": "langChat.tts.openVoices",
+          "when": "view == langChat.voices",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
         {
           "command": "langChat.models.startServer",
-          "when": "view == langChat.models && viewItem == engine.ollama.stopped",
+          "when": "view == langChat.engines && viewItem == engine.ollama.stopped",
           "group": "inline@1"
         },
         {
           "command": "langChat.models.stopServer",
-          "when": "view == langChat.models && viewItem == engine.ollama.running",
+          "when": "view == langChat.engines && viewItem == engine.ollama.running",
           "group": "inline@1"
         },
         {
           "command": "langChat.engine.install",
-          "when": "view == langChat.models && viewItem =~ /engine\\.(ollama|piper)\\.notinstalled/",
+          "when": "view == langChat.engines && viewItem =~ /engine\\.(ollama|piper)\\.notinstalled/",
           "group": "inline@1"
         },
         {
           "command": "langChat.tts.startServer",
-          "when": "view == langChat.models && viewItem == engine.piper.stopped",
+          "when": "view == langChat.engines && viewItem == engine.piper.stopped",
           "group": "inline@1"
         },
         {
           "command": "langChat.tts.stopServer",
-          "when": "view == langChat.models && viewItem == engine.piper.running",
+          "when": "view == langChat.engines && viewItem == engine.piper.running",
           "group": "inline@1"
         },
         {
           "command": "langChat.engine.delete",
-          "when": "view == langChat.models && viewItem =~ /engine\\.(ollama|piper)\\.(stopped|running)/",
+          "when": "view == langChat.engines && viewItem =~ /engine\\.(ollama|piper)\\.(stopped|running)/",
           "group": "inline@3"
-        },
-        {
-          "command": "langChat.models.add",
-          "when": "view == langChat.models && viewItem == ollamaModels",
-          "group": "inline"
         },
         {
           "command": "langChat.models.deleteModel",
@@ -243,17 +255,12 @@
         },
         {
           "command": "langChat.spell.openDictionary",
-          "when": "view == langChat.models && viewItem == spellDictLang",
-          "group": "inline"
-        },
-        {
-          "command": "langChat.tts.openVoices",
-          "when": "view == langChat.models && viewItem == piperVoices",
+          "when": "view == langChat.dictionary && viewItem == spellDictLang",
           "group": "inline"
         },
         {
           "command": "langChat.tts.removeVoice",
-          "when": "view == langChat.models && viewItem == piperVoice",
+          "when": "view == langChat.voices && viewItem == piperVoice",
           "group": "inline"
         }
       ],
