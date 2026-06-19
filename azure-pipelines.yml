@@ -1,10 +1,12 @@
 # CI/CD pipeline for Azure DevOps — staged.
 # Branching model: work on `development`, release from `main`.
 #
+# The pipeline triggers ONLY on main (work happens on `development`; release by merging to main).
 # Stages: Compile → Test → Package (→ .vsix artifact) → Publish.
-#   - Compile / Test / Package run on every push & PR to development or main.
-#   - Publish runs ONLY on main and ONLY after MANUAL approval (ManualValidation pauses the run;
-#     approve it in the Azure DevOps UI / via the notification email), then `vsce publish`.
+#   - Compile / Test / Package run on every push & PR to main.
+#   - Publish runs ONLY after MANUAL approval (ManualValidation pauses the run; approve it in the
+#     Azure DevOps UI / via the notification email), then `vsce publish`. The publish is idempotent:
+#     if the version in package.json is already on the Marketplace, it skips instead of failing.
 #
 # VSCE_PAT must be set as a SECRET pipeline variable (Pipelines → Edit → Variables → New →
 # tick "Keep this value secret"). Use an Azure DevOps PAT, scope Marketplace → Manage,
@@ -16,13 +18,11 @@ trigger:
   branches:
     include:
       - main
-      - development
 
 pr:
   branches:
     include:
       - main
-      - development
 
 stages:
   - stage: Compile
@@ -140,7 +140,18 @@ stages:
             inputs:
               artifact: vsix
               path: $(Pipeline.Workspace)/vsix
-          - script: npx --yes @vscode/vsce publish --packagePath "$(Pipeline.Workspace)/vsix/lang-chat.vsix"
+          - script: |
+              set +e
+              OUT=$(npx --yes @vscode/vsce publish --packagePath "$(Pipeline.Workspace)/vsix/lang-chat.vsix" 2>&1)
+              CODE=$?
+              echo "$OUT"
+              if [ $CODE -ne 0 ]; then
+                if echo "$OUT" | grep -qi "already exists"; then
+                  echo "This version is already on the Marketplace — nothing to publish (idempotent, not an error)."
+                  exit 0
+                fi
+                exit $CODE
+              fi
             displayName: 'Publish to VS Code Marketplace'
             env:
               VSCE_PAT: $(VSCE_PAT)
