@@ -1,7 +1,8 @@
 # CI/CD for GitHub Actions — equivalent to the old azure-pipelines.yml.
+# Manual only: runs ONLY when triggered from the Actions tab ("Run workflow"). Never on push/PR.
 # Jobs: compile → test → package (→ .vsix artifact) → publish.
-#   - push & PR to master: compile / test / package.
-#   - push to master: also publish to the VS Code Marketplace, gated by MANUAL APPROVAL.
+#   - Run it on `master` to publish to the VS Code Marketplace, gated by MANUAL APPROVAL.
+#   - Run it on any other branch to just build/test/package (publish is skipped off master).
 #
 # Manual approval: the `publish` job targets the `marketplace` environment. Configure it once in
 #   Settings → Environments → New environment → "marketplace" → enable "Required reviewers" and add
@@ -15,10 +16,6 @@
 name: Release
 
 on:
-  push:
-    branches: [master]
-  pull_request:
-    branches: [master]
   workflow_dispatch:
 
 permissions:
