@@ -1,5 +1,5 @@
-// ESLint (flat config). Pragmático: detecta bugs reales (promesas sin await, vars sin usar),
-// sin ser pedante con `any` (el código maneja JSON dinámico a propósito).
+// ESLint (flat config). Pragmatic: catches real bugs (unawaited promises, unused vars) without
+// being pedantic about `any` (the code handles dynamic JSON on purpose).
 const tseslint = require('@typescript-eslint/eslint-plugin');
 const parser = require('@typescript-eslint/parser');
 
