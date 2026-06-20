@@ -247,6 +247,7 @@
     branch: SVG('<line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>'),
     copy: SVG('<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
     check: SVG('<polyline points="20 6 9 17 4 12"/>'),
+    download: SVG('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
     trash: SVG('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>'),
     eye: SVG('<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/>'),
     tool: SVG('<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>'),
@@ -264,6 +265,18 @@
     b.innerHTML = svg;
     if (onClick) b.addEventListener('click', onClick);
     return b;
+  }
+
+  // Copies an image attachment to the system clipboard. base64 → Blob directly (no fetch: the CSP
+  // blocks data: URLs). Returns false if the browser/Electron clipboard can't take an image.
+  async function copyImageToClipboard(a) {
+    if (!navigator.clipboard || !window.ClipboardItem || !a || !a.data) return false;
+    const bin = atob(a.data);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    const blob = new Blob([arr], { type: a.mime || 'image/png' });
+    await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+    return true;
   }
 
   // ---- Read aloud (Web Speech API; local, uncensored) ----
@@ -518,12 +531,21 @@
     if (Number.isInteger(opts.index)) {
       const actions = document.createElement('span');
       actions.className = 'msg-actions';
-      const copyBtn = iconButton(ICONS.copy, t('Copy'), () => {
-        vscode.postMessage({ type: 'copy', text: content });
+      const imgAtt = (opts.attachments || []).find((a) => a.kind === 'image');
+      const copyBtn = iconButton(ICONS.copy, imgAtt ? t('Copy image') : t('Copy'), async () => {
+        // Image responses (nano-banana): copy the image to the clipboard; otherwise copy the text.
+        let ok = false;
+        if (imgAtt) ok = await copyImageToClipboard(imgAtt).catch(() => false);
+        if (!ok) vscode.postMessage({ type: 'copy', text: content });
         copyBtn.innerHTML = ICONS.check;
         setTimeout(() => { copyBtn.innerHTML = ICONS.copy; }, 1200);
       });
       actions.appendChild(copyBtn);
+      if (imgAtt) {
+        // Save the generated image to disk (native save dialog handled by the extension host).
+        actions.appendChild(iconButton(ICONS.download, t('Save image'),
+          () => vscode.postMessage({ type: 'saveImage', index: opts.index })));
+      }
       const readBtn = iconButton(ICONS.speaker, t('Read aloud'), () => tts.speak(content, readBtn, opts.id));
       actions.appendChild(readBtn);
       actions.appendChild(iconButton(ICONS.edit, t('Edit message'), () => startEditInline(el, opts.index)));

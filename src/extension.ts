@@ -1404,6 +1404,22 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
         case 'copy':
           if (typeof msg.text === 'string') await vscode.env.clipboard.writeText(msg.text);
           break;
+        case 'saveImage': {
+          // Saves a generated image of message `index` (the active variant) to disk via a native dialog.
+          const doc = getDoc();
+          const m = doc?.messages[msg.index];
+          if (!m) break;
+          const img = (m.attachments ?? []).map(resolveAtt).find((a) => a.kind === 'image' && a.data);
+          if (!img) break;
+          const ext = /jpe?g/i.test(img.mime) ? 'jpg' : /webp/i.test(img.mime) ? 'webp' : /gif/i.test(img.mime) ? 'gif' : 'png';
+          const target = await vscode.window.showSaveDialog({
+            defaultUri: vscode.Uri.file(path.join(os.homedir(), img.name || `image.${ext}`)),
+            filters: { [tr('Image')]: [ext] },
+          });
+          if (!target) break;
+          await vscode.workspace.fs.writeFile(target, Buffer.from(img.data, 'base64'));
+          break;
+        }
         case 'exportHtml': {
           // Writes a self-contained HTML file and opens it in the browser (which can print it → Save as PDF).
           const safe = String(msg.title || 'chat').replace(/[^\w\- ]+/g, '_').replace(/\s+/g, '_').slice(0, 40);
