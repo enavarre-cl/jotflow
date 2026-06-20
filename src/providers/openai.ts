@@ -1,9 +1,9 @@
-import { ChatMessage, ChatResult, GenerationParams, LLMProvider, ModelInfo, StreamCallbacks } from './types';
+import { ChatMessage, ChatResult, GenImage, GenerationParams, LLMProvider, ModelInfo, StreamCallbacks } from './types';
 import { createThinkSplitter } from './think';
 import { formatHttpError } from './httpError';
 import { httpFetch } from '../http';
 import { readLines, safeToolArgs } from './stream';
-import { imageAttachments, documentAttachments, dataUrl } from './multimodal';
+import { imageAttachments, documentAttachments, dataUrl, isImageOutputModel, parseDataUrl } from './multimodal';
 
 /** Message content in OpenAI format: string, or array of parts if there are images/documents. */
 function openAIContent(m: ChatMessage): any {
@@ -100,13 +100,18 @@ export class OpenAIProvider implements LLMProvider {
     p: GenerationParams,
     cb: StreamCallbacks
   ): Promise<ChatResult> {
+    // Image-output models (nano-banana / *-flash-image via OpenRouter): request the image modality
+    // and skip tools, which they don't support.
+    const imageOut = isImageOutputModel(model);
+
     const body: any = {
       model,
       messages: messages.map(openAIMessage),
       stream: true,
       stream_options: { include_usage: true },
     };
-    if (p.tools && p.tools.length) {
+    if (imageOut) body.modalities = ['image', 'text'];
+    if (!imageOut && p.tools && p.tools.length) {
       body.tools = p.tools.map((t) => ({
         type: 'function',
         function: { name: t.name, description: t.description, parameters: t.parameters },
@@ -150,6 +155,15 @@ export class OpenAIProvider implements LLMProvider {
     let thinking = '';
     const toolAcc: Record<number, { id: string; name: string; arguments: string }> = {};
     let usage: any;
+    const images: GenImage[] = [];
+    const imageSeen = new Set<string>(); // dedup (a frame may repeat in delta + final message)
+    const collectImages = (arr: any): void => {
+      if (!Array.isArray(arr)) return;
+      for (const im of arr) {
+        const parsed = parseDataUrl(im?.image_url?.url ?? im?.url ?? '');
+        if (parsed && !imageSeen.has(parsed.data)) { imageSeen.add(parsed.data); images.push(parsed); }
+      }
+    };
     const splitter = createThinkSplitter(
       (a) => { answer += a; cb.onDelta(a); },
       (th) => { thinking += th; cb.onReasoning?.(th); }
@@ -188,6 +202,9 @@ export class OpenAIProvider implements LLMProvider {
         if (typeof json.usage.cost === 'number') usage.cost = json.usage.cost;
       }
       const delta = json?.choices?.[0]?.delta ?? {};
+      // Image-output models (OpenRouter): images arrive in delta.images (streaming) or the final message.
+      collectImages(delta.images);
+      collectImages(json?.choices?.[0]?.message?.images);
       // Servers with a dedicated reasoning field (o1-style).
       const reasoning: string = delta.reasoning_content ?? delta.reasoning ?? '';
       if (reasoning) {
@@ -213,6 +230,10 @@ export class OpenAIProvider implements LLMProvider {
       .filter((t) => t.name)
       .map((t) => ({ id: t.id || `call_${t.name}`, name: t.name, arguments: safeToolArgs(t.arguments) }));
 
-    return { answer, thinking, usage, toolCalls: toolCalls.length ? toolCalls : undefined };
+    return {
+      answer, thinking, usage,
+      toolCalls: toolCalls.length ? toolCalls : undefined,
+      images: images.length ? images : undefined,
+    };
   }
 }

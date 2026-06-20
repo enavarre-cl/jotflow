@@ -5,6 +5,7 @@ import {
   parseQuant, heuristicCapabilities, hfPullRef, formatBytes, isAuxiliaryGguf, isOllamaPullable, shardInfo,
   parseParamCount, formatParams, domainFromPipeline, isOfficialOrg,
 } from '../ollama/parse';
+import { isImageOutputModel, parseDataUrl } from '../providers/multimodal';
 
 // --- assets ---
 test('ollamaAsset picks the correct asset by platform/arch', () => {
@@ -73,6 +74,18 @@ test('isOllamaPullable: standard (1 quant) yes, non-standard (multiple/none) no'
   assert.strictEqual(isOllamaPullable('gemma-4-31B_q4_0-it.gguf'), false);
   // No recognisable quant token.
   assert.strictEqual(isOllamaPullable('plain-model.gguf'), false);
+});
+
+test('isImageOutputModel / parseDataUrl', () => {
+  assert.strictEqual(isImageOutputModel('gemini-2.5-flash-image'), true);
+  assert.strictEqual(isImageOutputModel('google/gemini-2.5-flash-image-preview'), true);
+  assert.strictEqual(isImageOutputModel('nano-banana'), true);
+  assert.strictEqual(isImageOutputModel('gpt-4o'), false);
+  assert.strictEqual(isImageOutputModel('claude-opus-4-8'), false);
+  assert.deepStrictEqual(parseDataUrl('data:image/png;base64,AAAB'), { mime: 'image/png', data: 'AAAB' });
+  assert.deepStrictEqual(parseDataUrl('data:image/jpeg;base64,Zm9v'), { mime: 'image/jpeg', data: 'Zm9v' });
+  assert.strictEqual(parseDataUrl('https://example.com/x.png'), null);
+  assert.strictEqual(parseDataUrl(''), null);
 });
 
 test('shardInfo parses split GGUF parts and ignores single files', () => {

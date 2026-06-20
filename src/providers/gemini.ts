@@ -1,8 +1,8 @@
-import { ChatMessage, ChatResult, GenerationParams, LLMProvider, ModelInfo, StreamCallbacks } from './types';
+import { ChatMessage, ChatResult, GenImage, GenerationParams, LLMProvider, ModelInfo, StreamCallbacks } from './types';
 import { formatHttpError } from './httpError';
 import { httpFetch } from '../http';
 import { readLines } from './stream';
-import { imageAttachments, documentAttachments } from './multimodal';
+import { imageAttachments, documentAttachments, isImageOutputModel } from './multimodal';
 
 /**
  * Provider for the Google Gemini API (Generative Language API).
@@ -96,6 +96,10 @@ export class GeminiProvider implements LLMProvider {
     }
     flushFns();
 
+    // Image-output models (nano-banana / *-flash-image): ask for the IMAGE modality and skip
+    // tools/thinking, which they don't support.
+    const imageOut = isImageOutputModel(model);
+
     const generationConfig: any = {};
     if (p.temperature !== undefined) generationConfig.temperature = p.temperature;
     if (p.maxTokens !== undefined && p.maxTokens > 0) generationConfig.maxOutputTokens = p.maxTokens;
@@ -105,13 +109,14 @@ export class GeminiProvider implements LLMProvider {
     if (p.presencePenalty !== undefined) generationConfig.presencePenalty = p.presencePenalty;
     if (p.frequencyPenalty !== undefined) generationConfig.frequencyPenalty = p.frequencyPenalty;
     if (p.stop && p.stop.length) generationConfig.stopSequences = p.stop;
-    if (p.thinking) generationConfig.thinkingConfig = { includeThoughts: true };
+    if (p.thinking && !imageOut) generationConfig.thinkingConfig = { includeThoughts: true };
+    if (imageOut) generationConfig.responseModalities = ['TEXT', 'IMAGE'];
 
     const body: any = { contents, generationConfig };
     if (systemTexts.length) {
       body.systemInstruction = { parts: [{ text: systemTexts.join('\n\n') }] };
     }
-    if (p.tools && p.tools.length) {
+    if (!imageOut && p.tools && p.tools.length) {
       body.tools = [{
         functionDeclarations: p.tools.map((t) => ({
           name: t.name,
@@ -139,6 +144,7 @@ export class GeminiProvider implements LLMProvider {
     let thinking = '';
     let usage: any;
     const toolCalls: { id: string; name: string; arguments: string }[] = [];
+    const images: GenImage[] = [];
 
     await readLines(reader, (line) => {
       if (!line.startsWith('data:')) return;
@@ -164,7 +170,10 @@ export class GeminiProvider implements LLMProvider {
       }
       const parts = json?.candidates?.[0]?.content?.parts ?? [];
       for (const part of parts) {
-        if (part?.functionCall) {
+        const inline = part?.inlineData ?? part?.inline_data;
+        if (inline?.data) {
+          images.push({ mime: inline.mimeType ?? inline.mime_type ?? 'image/png', data: inline.data });
+        } else if (part?.functionCall) {
           toolCalls.push({
             id: `call_${part.functionCall.name}_${toolCalls.length}`,
             name: part.functionCall.name,
@@ -182,7 +191,11 @@ export class GeminiProvider implements LLMProvider {
       }
     });
 
-    return { answer, thinking, usage, toolCalls: toolCalls.length ? toolCalls : undefined };
+    return {
+      answer, thinking, usage,
+      toolCalls: toolCalls.length ? toolCalls : undefined,
+      images: images.length ? images : undefined,
+    };
   }
 }
 

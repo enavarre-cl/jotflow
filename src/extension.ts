@@ -574,6 +574,13 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       await saveAttach(store);
       return refs;
     };
+    // Stores images returned by an image-output model as image attachments (sidecar refs).
+    const storeGenImages = async (images: { mime: string; data: string }[]): Promise<any[]> => {
+      const ext = (mime: string) => (/jpeg|jpg/i.test(mime) ? 'jpg' : /webp/i.test(mime) ? 'webp' : /gif/i.test(mime) ? 'gif' : 'png');
+      return storeAttachments(images.map((im, i) => ({
+        kind: 'image', name: `image-${i + 1}.${ext(im.mime)}`, mime: im.mime || 'image/png', data: im.data,
+      })));
+    };
     // Returns an attachment with `data` resolved (from the sidecar if a ref, or legacy inline).
     const resolveAtt = (a: any): any => {
       if (typeof a?.data === 'string') return a; // legacy inline
@@ -587,7 +594,10 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
     const pruneAttach = async (doc: ChatDoc): Promise<void> => {
       if (!attachCache) return; // only if attachments have been/were loaded
       const used = new Set<string>();
-      for (const m of doc.messages) for (const a of (m.attachments ?? [])) if (a.ref) used.add(a.ref);
+      for (const m of doc.messages) {
+        for (const a of (m.attachments ?? [])) if (a.ref) used.add(a.ref);
+        for (const v of (m.variants ?? [])) for (const a of (v.attachments ?? [])) if (a.ref) used.add(a.ref);
+      }
       let changed = false;
       for (const id of Object.keys(attachCache)) {
         if (!used.has(id)) { delete attachCache[id]; changed = true; }
@@ -735,7 +745,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       doc: ChatDoc,
       context: ChatMessage[],
       allowTools = false
-    ): Promise<{ answer: string; thinking: string; failed: boolean; usage?: any }> => {
+    ): Promise<{ answer: string; thinking: string; failed: boolean; usage?: any; images: { mime: string; data: string }[] }> => {
       let history = context;
       let summaryText = '';
       // Resolve ONCE: used both to budget the trimming below and as the system message sent. Must be
@@ -841,6 +851,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       let failed = false;
       let aborted = false;
       let usage: any = undefined;
+      let images: { mime: string; data: string }[] = [];
 
       // Agentic loop: if the model requests tools, they are executed and fed back.
       // A single AbortController for the ENTIRE turn: so Stop also cuts between
@@ -852,7 +863,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
         if (ac.signal.aborted) { aborted = true; break; }
         const id = `m_${Date.now().toString(36)}_${iter}`;
         webview.postMessage({ type: 'streamStart', id });
-        let res: { answer: string; thinking: string; toolCalls?: any[]; usage?: any } = { answer: '', thinking: '' };
+        let res: { answer: string; thinking: string; toolCalls?: any[]; usage?: any; images?: { mime: string; data: string }[] } = { answer: '', thinking: '' };
         try {
           res = await buildProvider(doc.provider).chat(doc.model, wire, params, {
             signal: ac.signal,
@@ -865,6 +876,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
         }
         webview.postMessage({ type: 'streamEnd', id });
         if (res.usage) usage = addUsage(usage, res.usage);
+        if (res.images?.length) images = images.concat(res.images);
         answer = res.answer;
         thinking = res.thinking;
 
@@ -901,13 +913,13 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       }
       if (abort === ac) abort = undefined; // release the turn's controller
 
-      if (!failed && !answer && !thinking && !aborted) {
+      if (!failed && !answer && !thinking && !images.length && !aborted) {
         webview.postMessage({
           type: 'error',
           message: tr('The model returned no content. Try another model; on OpenRouter, check the key\'s credits/limits.'),
         });
       }
-      return { answer, thinking, failed, usage };
+      return { answer, thinking, failed, usage, images };
     };
 
     const handleSend = async (text: string, attachments?: any[]): Promise<void> => {
@@ -931,13 +943,14 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       }
       await writeDoc(doc);
 
-      const { answer, thinking, failed, usage } = await runInference(doc, doc.messages, true);
-      if (!failed && (answer || thinking)) {
+      const { answer, thinking, failed, usage, images } = await runInference(doc, doc.messages, true);
+      if (!failed && (answer || thinking || images.length)) {
         const fresh = getDoc();
         if (fresh) {
           const m: ChatMessage = { role: 'assistant', content: answer };
           if (thinking) m.thinking = thinking;
           if (usage) m.usage = usage;
+          if (images.length) m.attachments = await storeGenImages(images);
           fresh.messages.push(m);
           await writeDoc(fresh);
         }
@@ -957,13 +970,14 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       const last = doc.messages[doc.messages.length - 1];
       if (!last || last.role !== 'user') return;
 
-      const { answer, thinking, failed, usage } = await runInference(doc, doc.messages, true);
-      if (!failed && (answer || thinking)) {
+      const { answer, thinking, failed, usage, images } = await runInference(doc, doc.messages, true);
+      if (!failed && (answer || thinking || images.length)) {
         const fresh = getDoc();
         if (fresh) {
           const m: ChatMessage = { role: 'assistant', content: answer };
           if (thinking) m.thinking = thinking;
           if (usage) m.usage = usage;
+          if (images.length) m.attachments = await storeGenImages(images);
           fresh.messages.push(m);
           await writeDoc(fresh);
         }
@@ -1009,7 +1023,10 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
 
       // Copies referenced attachments to the fork's sidecar (same ids).
       const refIds = new Set<string>();
-      for (const m of sliced) for (const a of (m.attachments ?? [])) if (a.ref) refIds.add(a.ref);
+      for (const m of sliced) {
+        for (const a of (m.attachments ?? [])) if (a.ref) refIds.add(a.ref);
+        for (const v of (m.variants ?? [])) for (const a of (v.attachments ?? [])) if (a.ref) refIds.add(a.ref);
+      }
       if (refIds.size) {
         const src = loadAttach();
         const dst: Record<string, any> = {};
@@ -1069,25 +1086,27 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       }
       if (idx < 0) return;
 
-      const { answer, thinking, failed, usage } = await runInference(doc, doc.messages.slice(0, idx));
-      if (failed || (!answer && !thinking)) { sendHistory(); return; }
+      const { answer, thinking, failed, usage, images } = await runInference(doc, doc.messages.slice(0, idx));
+      if (failed || (!answer && !thinking && !images.length)) { sendHistory(); return; }
 
       const fresh = getDoc();
       const target = fresh?.messages[idx];
       if (!fresh || !target || target.role !== 'assistant') { sendHistory(); return; }
 
       if (!Array.isArray(target.variants) || target.variants.length === 0) {
-        // The original response becomes variant 0 (preserving its token usage).
-        target.variants = [{ content: target.content, thinking: target.thinking, usage: target.usage }];
+        // The original response becomes variant 0 (preserving its usage and any images).
+        target.variants = [{ content: target.content, thinking: target.thinking, usage: target.usage, attachments: target.attachments }];
       }
       const variant: any = { content: answer };
       if (thinking) variant.thinking = thinking;
       if (usage) variant.usage = usage;
+      if (images.length) variant.attachments = await storeGenImages(images);
       target.variants.push(variant);
       target.active = target.variants.length - 1;
       target.content = answer;
       if (thinking) target.thinking = thinking; else delete target.thinking;
       if (usage) target.usage = usage; else delete target.usage;
+      if (variant.attachments) target.attachments = variant.attachments; else delete target.attachments;
       await writeDoc(fresh);
       sendHistory();
     };
@@ -1102,6 +1121,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       t.content = t.variants[variant].content;
       if (t.variants[variant].thinking) t.thinking = t.variants[variant].thinking; else delete t.thinking;
       if (t.variants[variant].usage) t.usage = t.variants[variant].usage; else delete t.usage;
+      if (t.variants[variant].attachments) t.attachments = t.variants[variant].attachments; else delete t.attachments;
       await writeDoc(doc);
       sendHistory();
     };
@@ -1118,6 +1138,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
         t.content = only.content;
         if (only.thinking) t.thinking = only.thinking; else delete t.thinking;
         if (only.usage) t.usage = only.usage; else delete t.usage;
+        if (only.attachments) t.attachments = only.attachments; else delete t.attachments;
         delete t.variants;
         delete t.active;
       } else {
@@ -1126,6 +1147,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
         t.content = t.variants[a].content;
         if (t.variants[a].thinking) t.thinking = t.variants[a].thinking; else delete t.thinking;
         if (t.variants[a].usage) t.usage = t.variants[a].usage; else delete t.usage;
+        if (t.variants[a].attachments) t.attachments = t.variants[a].attachments; else delete t.attachments;
       }
       await writeDoc(doc);
       sendHistory();

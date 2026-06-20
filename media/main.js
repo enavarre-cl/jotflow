@@ -584,8 +584,10 @@
     el.appendChild(roleEl);
     const body = document.createElement('div');
     body.className = 'body';
-    if (role === 'assistant' && !opts.cursor && !(content && content.trim())) {
+    const hasImage = Array.isArray(opts.attachments) && opts.attachments.some((a) => a.kind === 'image');
+    if (role === 'assistant' && !opts.cursor && !(content && content.trim()) && !hasImage) {
       // Empty response (some models put everything into reasoning): clear note instead of a blank bubble.
+      // Skipped when the response is an image (nano-banana): the image below IS the content.
       body.innerHTML = opts.thinking
         ? '<span class="empty-note">' + escapeHtml(t('The model put the whole response in its reasoning 🧠 — turn off «Reasoning / thinking» in ⚙ to see it here.')) + '</span>'
         : '<span class="empty-note">' + escapeHtml(t('(empty response)')) + '</span>';

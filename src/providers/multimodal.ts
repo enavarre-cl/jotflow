@@ -14,3 +14,18 @@ export function documentAttachments(m: ChatMessage): Attachment[] {
 export function dataUrl(a: Attachment): string {
   return `data:${a.mime};base64,${a.data}`;
 }
+
+/**
+ * Does this model OUTPUT images (e.g. Gemini "nano-banana" / *-flash-image)? Such models need the
+ * image modality requested and return image parts. Detected by id since neither API exposes it at
+ * call time; a false positive just yields a clear API error (the modality is rejected).
+ */
+export function isImageOutputModel(model: string): boolean {
+  return /nano-?banana|image/i.test(model || '');
+}
+
+/** Parses a base64 data URL ("data:image/png;base64,XXXX") into {mime,data}, or null. */
+export function parseDataUrl(url: string): { mime: string; data: string } | null {
+  const m = typeof url === 'string' && url.match(/^data:([^;,]+);base64,(.+)$/);
+  return m ? { mime: m[1], data: m[2] } : null;
+}

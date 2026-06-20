@@ -1,4 +1,22 @@
-import { ChatMessage, ChatVariant, GenerationParams, ProviderId, TokenUsage, validateProvider } from './providers';
+import { Attachment, ChatMessage, ChatVariant, GenerationParams, ProviderId, TokenUsage, validateProvider } from './providers';
+
+/** Validates/normalizes raw attachments (message- or variant-level) from a loaded .chat. */
+function parseAttachments(raw: any): Attachment[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((a: any) => a && (a.kind === 'image' || a.kind === 'text' || a.kind === 'document')
+      && (typeof a.data === 'string' || typeof a.ref === 'string'))
+    .map((a: any) => {
+      const o: Attachment = {
+        kind: a.kind,
+        name: typeof a.name === 'string' ? a.name : 'attachment',
+        mime: typeof a.mime === 'string' ? a.mime : 'application/octet-stream',
+      };
+      if (typeof a.ref === 'string') o.ref = a.ref;
+      if (typeof a.data === 'string') o.data = a.data; // compat: legacy inline attachments
+      return o;
+    });
+}
 
 /** A parameter that can be toggled on/off, with its numeric value. */
 export interface Toggle {
@@ -183,22 +201,8 @@ export function parseDoc(text: string, defaults: ChatDefaults): ChatDoc {
             }
             if (typeof m.toolCallId === 'string') msg.toolCallId = m.toolCallId;
             if (typeof m.toolName === 'string') msg.toolName = m.toolName;
-            if (Array.isArray(m.attachments)) {
-              const atts = m.attachments
-                .filter((a: any) => a && (a.kind === 'image' || a.kind === 'text' || a.kind === 'document')
-                  && (typeof a.data === 'string' || typeof a.ref === 'string'))
-                .map((a: any) => {
-                  const o: any = {
-                    kind: a.kind,
-                    name: typeof a.name === 'string' ? a.name : 'attachment',
-                    mime: typeof a.mime === 'string' ? a.mime : 'application/octet-stream',
-                  };
-                  if (typeof a.ref === 'string') o.ref = a.ref;
-                  if (typeof a.data === 'string') o.data = a.data; // compat: legacy inline attachments
-                  return o;
-                });
-              if (atts.length) msg.attachments = atts;
-            }
+            const atts = parseAttachments(m.attachments);
+            if (atts.length) msg.attachments = atts;
             if (Array.isArray(m.variants)) {
               const variants = m.variants
                 .filter((v: any) => v && typeof v.content === 'string')
@@ -213,6 +217,8 @@ export function parseDoc(text: string, defaults: ChatDefaults): ChatDoc {
                     };
                     if (typeof v.usage.cost === 'number') o.usage.cost = v.usage.cost;
                   }
+                  const vatts = parseAttachments(v.attachments);
+                  if (vatts.length) o.attachments = vatts;
                   return o;
                 });
               if (variants.length > 1) {
