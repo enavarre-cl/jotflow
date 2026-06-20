@@ -205,8 +205,13 @@ export class OpenAIProvider implements LLMProvider {
       // Image-output models (OpenRouter): images arrive in delta.images (streaming) or the final message.
       collectImages(delta.images);
       collectImages(json?.choices?.[0]?.message?.images);
-      // Servers with a dedicated reasoning field (o1-style).
-      const reasoning: string = delta.reasoning_content ?? delta.reasoning ?? '';
+      // Servers with a dedicated reasoning field (o1-style). OpenRouter also (and for some models,
+      // e.g. Gemini, ONLY) sends structured reasoning in reasoning_details: reasoning.text → text,
+      // reasoning.summary → summary (reasoning.encrypted has no readable text → skipped).
+      let reasoning: string = delta.reasoning_content ?? delta.reasoning ?? '';
+      if (!reasoning && Array.isArray(delta.reasoning_details)) {
+        reasoning = delta.reasoning_details.map((d: any) => d?.text ?? d?.summary ?? '').join('');
+      }
       if (reasoning) {
         thinking += reasoning;
         cb.onReasoning?.(reasoning);
