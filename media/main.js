@@ -603,6 +603,8 @@
         if (a.kind === 'image') {
           const img = document.createElement('img');
           img.src = 'data:' + a.mime + ';base64,' + a.data;
+          img.title = t('Click to enlarge');
+          img.addEventListener('click', () => img.classList.toggle('zoomed'));
           att.appendChild(img);
         } else {
           const c = document.createElement('span');
