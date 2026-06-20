@@ -1412,8 +1412,12 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
           const img = (m.attachments ?? []).map(resolveAtt).find((a) => a.kind === 'image' && a.data);
           if (!img) break;
           const ext = /jpe?g/i.test(img.mime) ? 'jpg' : /webp/i.test(img.mime) ? 'webp' : /gif/i.test(img.mime) ? 'gif' : 'png';
+          // Default to the workspace folder (fall back to the .chat's folder, then home).
+          const saveDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+            || path.dirname(document.uri.fsPath)
+            || os.homedir();
           const target = await vscode.window.showSaveDialog({
-            defaultUri: vscode.Uri.file(path.join(os.homedir(), img.name || `image.${ext}`)),
+            defaultUri: vscode.Uri.file(path.join(saveDir, img.name || `image.${ext}`)),
             filters: { [tr('Image')]: [ext] },
           });
           if (!target) break;
