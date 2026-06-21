@@ -16,7 +16,7 @@
       root = root || document;
       const self = this;
       root.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = self.t(el.getAttribute('data-i18n')); });
-      root.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = self.t(el.getAttribute('data-i18n-title')); });
+      root.querySelectorAll('[data-i18n-title]').forEach((el) => { const v = self.t(el.getAttribute('data-i18n-title')); el.title = v; el.dataset.tip = v; });
       root.querySelectorAll('[data-i18n-ph]').forEach((el) => { el.placeholder = self.t(el.getAttribute('data-i18n-ph')); });
     },
   };

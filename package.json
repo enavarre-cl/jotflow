@@ -2,7 +2,7 @@
   "name": "lang-chat",
   "displayName": "Lang Chat",
   "description": "%ext.description%",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "publisher": "enavarre",
   "license": "MIT",
   "engines": {
@@ -492,6 +492,14 @@
             },
             "default": [],
             "markdownDescription": "%config.openrouter.vendors.desc%"
+          },
+          "langChat.openrouter.customModels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "markdownDescription": "%config.openrouter.customModels.desc%"
           },
           "langChat.openrouter.sort": {
             "type": "string",

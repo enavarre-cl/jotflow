@@ -43,6 +43,7 @@
   "config.openrouter.sort.enum.price": "Cheapest",
   "config.openrouter.sort.enum.throughput": "Fastest provider (recommended with tools)",
   "config.openrouter.vendors.desc": "Filter OpenRouter models by vendor (the prefix before `/`). Empty = all. E.g.: `openai`, `anthropic`, `google`, `meta-llama`, `mistralai`, `deepseek`, `qwen`, `x-ai`.",
+  "config.openrouter.customModels.desc": "Extra OpenRouter model ids to add to the model list, even if the API doesn't return them (e.g. new or preview models). One id per item, e.g. `sourceful/riverflow-v2.5-fast`.",
   "config.provider.desc": "Default model backend for new chats.",
   "config.provider.enum.anthropic": "Anthropic Claude (Messages API)",
   "config.provider.enum.gemini": "Google Gemini (Generative Language API)",

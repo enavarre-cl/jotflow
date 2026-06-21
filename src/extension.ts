@@ -373,6 +373,30 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       if (doc) webview.postMessage({ type: 'doc', doc: resolveDocForView(doc) });
     };
 
+    // Workspace file list for @-mention autocomplete (cached briefly; respects files/search excludes).
+    let fileCache: string[] | null = null;
+    let fileCacheAt = 0;
+    const workspaceFiles = async (): Promise<string[]> => {
+      if (fileCache && Date.now() - fileCacheAt < 15000) return fileCache;
+      const uris = await vscode.workspace.findFiles(
+        '**/*',
+        '**/{node_modules,.git,out,dist,.next,build,coverage,.vscode-test}/**',
+        5000
+      );
+      fileCache = uris.map((u) => vscode.workspace.asRelativePath(u, false)).sort((a, b) => a.localeCompare(b));
+      fileCacheAt = Date.now();
+      return fileCache;
+    };
+    const searchFiles = async (q: string): Promise<string[]> => {
+      const all = await workspaceFiles();
+      const ql = q.toLowerCase();
+      if (!ql) return all.slice(0, 10);
+      const base = (p: string) => (p.split('/').pop() || p).toLowerCase();
+      const starts = all.filter((p) => base(p).startsWith(ql));
+      const incl = all.filter((p) => !base(p).startsWith(ql) && p.toLowerCase().includes(ql));
+      return [...starts, ...incl].slice(0, 10);
+    };
+
     // Sends the effective language + its translation bundle to the webview (so a live change to any
     // locale re-translates without a reload — the webview can't carry every language's bundle).
     const pushLang = (): void => {
@@ -656,11 +680,16 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
         let models = await buildProvider(doc.provider).listModels();
         // Global OpenRouter vendor filter (prefix before '/').
         if (doc.provider === 'openrouter') {
-          const vendors = vscode.workspace
-            .getConfiguration('langChat')
-            .get<string[]>('openrouter.vendors', []);
+          const cfg = vscode.workspace.getConfiguration('langChat');
+          const vendors = cfg.get<string[]>('openrouter.vendors', []);
           if (vendors.length) {
             models = models.filter((m) => vendors.includes(m.id.split('/')[0]));
+          }
+          // Custom model ids the API doesn't list (new/preview). Always included, before the vendor list.
+          const custom = cfg.get<string[]>('openrouter.customModels', []).map((s) => (s || '').trim()).filter(Boolean);
+          const present = new Set(models.map((m) => m.id));
+          for (const id of [...custom].reverse()) {
+            if (!present.has(id)) { models.unshift({ id }); present.add(id); }
           }
         }
         modelContexts = {};
@@ -1411,6 +1440,12 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
         case 'copy':
           if (typeof msg.text === 'string') await vscode.env.clipboard.writeText(msg.text);
           break;
+        case 'atFiles': {
+          // @-mention autocomplete: return workspace files matching the partial query.
+          const files = await searchFiles(typeof msg.q === 'string' ? msg.q : '');
+          webview.postMessage({ type: 'atFilesResult', q: msg.q, reqId: msg.reqId, files });
+          break;
+        }
         case 'saveImage': {
           // Saves a generated image of message `index` (the active variant) to disk via a native dialog.
           const doc = getDoc();

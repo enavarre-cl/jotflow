@@ -404,6 +404,8 @@ mark.find-hit.current {
   background: var(--vscode-textBlockQuote-background, rgba(127,127,127,.12));
   border: 1px solid var(--vscode-panel-border);
 }
+/* Full-width bubbles: differentiated only by background colour + the role title (not width/side). */
+.msg.user, .msg.assistant { align-self: stretch; max-width: none; }
 .msg .role {
   display: flex;
   align-items: center;
@@ -439,6 +441,27 @@ mark.find-hit.current {
 }
 .icon-act svg { width: 17px; height: 17px; display: block; }
 .icon-act:hover { background: var(--vscode-toolbar-hoverBackground, rgba(127,127,127,.3)); }
+/* Floating tooltip for any [data-tip] element (JS-positioned on the body → immune to the native
+ * title being unreliable in webviews and to container clipping in the topbar / scroll area). */
+#tip {
+  position: fixed;
+  z-index: 100000;
+  max-width: 320px;
+  white-space: pre-line;
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 5px 9px;
+  border-radius: 6px;
+  color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground));
+  background: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background));
+  border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-panel-border));
+  box-shadow: 0 3px 12px rgba(0,0,0,.4);
+  pointer-events: none;
+}
+#tip.hidden { display: none; }
+/* Trash button armed for the confirming 2nd click: red, and keep the actions row visible. */
+.icon-act.armed { color: var(--vscode-errorForeground, #f14c4c); background: var(--vscode-inputValidation-errorBackground, rgba(241,76,76,.15)); }
+.msg-actions:has(.icon-act.armed) { opacity: 1; }
 
 .msg.editing {
   align-self: stretch;
@@ -686,7 +709,7 @@ mark.find-hit.current {
 #emojiGrid button:hover { background: var(--vscode-toolbar-hoverBackground, rgba(127,127,127,.25)); }
 
 /* Emoji autocomplete (:name) */
-#emojiSuggest {
+#emojiSuggest, #fileSuggest {
   position: fixed;
   min-width: 200px;
   max-width: 280px;
@@ -709,6 +732,11 @@ mark.find-hit.current {
 .sug-row.active, .sug-row:hover { background: var(--vscode-list-activeSelectionBackground, var(--vscode-toolbar-hoverBackground)); }
 .sug-em { font-size: 18px; }
 .sug-name { font-size: 12px; opacity: .8; }
+/* @file mention rows: filename + dimmed directory path. */
+#fileSuggest { max-width: 420px; }
+.sug-row.file { flex-direction: column; align-items: stretch; gap: 0; }
+.sug-file { font-size: 13px; }
+.sug-path { font-size: 11px; opacity: .55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
 
 #inputToolbar { display: flex; align-items: center; gap: 4px; }
 #inputToolbar .grow { flex: 1; }

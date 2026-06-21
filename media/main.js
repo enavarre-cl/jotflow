@@ -9,6 +9,47 @@
 
   let doc = null; // current ChatDoc
   let streamingEl = null;
+  // Two-step message delete: the trash button currently "armed" (red), awaiting a confirming click.
+  let armedDelBtn = null;
+  function disarmDelete() { if (armedDelBtn) { armedDelBtn.classList.remove('armed'); armedDelBtn = null; } }
+  // Any click outside the armed trash, or pressing Escape, cancels the pending delete.
+  document.addEventListener('click', (e) => { if (armedDelBtn && !armedDelBtn.contains(e.target)) disarmDelete(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') disarmDelete(); });
+
+  // ---- Floating tooltip for any [data-tip] element (native `title` doesn't render reliably in webviews) ----
+  const tipEl = document.createElement('div');
+  tipEl.id = 'tip';
+  tipEl.className = 'hidden';
+  document.body.appendChild(tipEl);
+  let tipTarget = null;
+  function showTip(el) {
+    const text = el.getAttribute('data-tip');
+    if (!text) { hideTip(); return; }
+    tipTarget = el;
+    tipEl.textContent = text;
+    tipEl.style.visibility = 'hidden';
+    tipEl.classList.remove('hidden');
+    const r = el.getBoundingClientRect();
+    const tw = tipEl.offsetWidth, th = tipEl.offsetHeight;
+    let top = r.bottom + 6;
+    if (top + th > window.innerHeight - 4) top = r.top - th - 6; // flip above if no room below
+    let left = Math.max(4, Math.min(r.left + r.width / 2 - tw / 2, window.innerWidth - tw - 4));
+    tipEl.style.top = Math.round(top) + 'px';
+    tipEl.style.left = Math.round(left) + 'px';
+    tipEl.style.visibility = 'visible';
+  }
+  function hideTip() { tipEl.classList.add('hidden'); tipTarget = null; }
+  document.addEventListener('mouseover', (e) => {
+    const el = e.target.closest ? e.target.closest('[data-tip]') : null;
+    if (el && el !== tipTarget) showTip(el);
+  });
+  document.addEventListener('mouseout', (e) => {
+    if (!tipTarget) return;
+    const el = e.target.closest ? e.target.closest('[data-tip]') : null;
+    if (el === tipTarget && !(e.relatedTarget && tipTarget.contains(e.relatedTarget))) hideTip();
+  });
+  document.addEventListener('scroll', hideTip, true); // never let it stick while scrolling
+  window.addEventListener('blur', hideTip);
   let streamingText = '';
   let thinkingText = ''; // reasoning for the current turn
 
@@ -261,7 +302,9 @@
   function iconButton(svg, title, onClick) {
     const b = document.createElement('button');
     b.className = 'icon-act';
-    b.title = title;
+    // Custom tooltip (data-tip → CSS) instead of the slow/unreliable native `title`; aria-label for a11y.
+    b.dataset.tip = title;
+    b.setAttribute('aria-label', title);
     b.innerHTML = svg;
     if (onClick) b.addEventListener('click', onClick);
     return b;
@@ -589,17 +632,31 @@
       const hasVariants = opts.variantCount > 1;
       const delTitle = (hasVariants
         ? `${t('Delete this variant')} (${(opts.variantActive || 0) + 1}/${opts.variantCount})`
-        : t('Delete message')) + ` · ${t('⌥/Alt: delete this and all below')} · ${t('⇧/Shift: skip confirmation')}`;
-      actions.appendChild(iconButton(ICONS.trash, delTitle, (e) => {
-        const confirm = !(e && e.shiftKey); // Shift skips confirmation
-        if (e && e.altKey && Number.isInteger(opts.index)) {
-          vscode.postMessage({ type: 'deleteFrom', index: opts.index, confirm }); // deletes this and all below
-        } else if (hasVariants) {
-          vscode.postMessage({ type: 'deleteVariant', index: opts.index, variant: opts.variantActive || 0, confirm });
-        } else {
-          vscode.postMessage({ type: 'deleteMessage', index: opts.index, confirm });
-        }
-      }));
+        : t('Delete message'))
+        + `\n${t('Click again to confirm')}`
+        + `\n${t('⌥/Alt: delete this and all below')}`
+        + `\n${t('⇧/Shift: skip confirmation')}`;
+      // Two-step delete: 1st click arms (turns red), 2nd click on the armed trash confirms. Any other
+      // event (click elsewhere, re-render from inference/history) disarms it. Shift = delete now.
+      const trashBtn = iconButton(ICONS.trash, delTitle, (e) => {
+        e.stopPropagation(); // keep trash clicks from reaching the document-level disarm handler
+        const performDelete = () => {
+          disarmDelete();
+          if (e.altKey && Number.isInteger(opts.index)) {
+            vscode.postMessage({ type: 'deleteFrom', index: opts.index, confirm: false }); // this + all below
+          } else if (hasVariants) {
+            vscode.postMessage({ type: 'deleteVariant', index: opts.index, variant: opts.variantActive || 0, confirm: false });
+          } else {
+            vscode.postMessage({ type: 'deleteMessage', index: opts.index, confirm: false });
+          }
+        };
+        if (e.shiftKey) { performDelete(); return; }              // Shift = delete immediately (as before)
+        if (armedDelBtn === trashBtn) { performDelete(); return; } // 2nd click on the red trash = confirm
+        disarmDelete();                                            // arm this one (only one at a time)
+        armedDelBtn = trashBtn;
+        trashBtn.classList.add('armed');
+      });
+      actions.appendChild(trashBtn);
       roleEl.appendChild(actions);
     }
 
@@ -687,6 +744,7 @@
     save.addEventListener('click', commit);
     cancel.addEventListener('click', close);
     ta.addEventListener('keydown', (e) => {
+      if (handleFileKeydown(e)) return;
       if (handleSuggestKeydown(e)) return;
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commit(); }
       else if (e.key === 'Escape') { e.preventDefault(); close(); }
@@ -817,6 +875,7 @@
 
   let summaryOpen = false; // is the summary bubble expanded?
   function renderConversation() {
+    disarmDelete(); // the trash buttons are about to be recreated → cancel any pending two-step delete
     // If a message that no longer exists (was deleted) is being read, stop the audio.
     if (tts.busy() && tts.msgId && doc && !(doc.messages || []).some((m) => m.id === tts.msgId)) {
       tts.stop();
@@ -1708,6 +1767,7 @@
   sendBtn.addEventListener('click', send);
   stopBtn.addEventListener('click', () => vscode.postMessage({ type: 'stop' }));
   inputEl.addEventListener('keydown', (e) => {
+    if (handleFileKeydown(e)) return;
     if (handleSuggestKeydown(e)) return;
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   });
@@ -2056,6 +2116,89 @@
   }
   setupEmojiAutocomplete(inputEl);
 
+  // ---- @file mention autocomplete (workspace files resolved by the extension; inserts the FULL path) ----
+  const fileSuggest = document.createElement('div');
+  fileSuggest.id = 'fileSuggest';
+  fileSuggest.className = 'hidden';
+  document.body.appendChild(fileSuggest);
+  let fileItems = [];   // relative paths
+  let fileActive = 0;
+  let fileTa = null;
+  let fileReq = 0;      // matches async results to the latest query
+  const fileOpen = () => !fileSuggest.classList.contains('hidden');
+
+  // `@` followed by a partial path (no spaces) at the caret.
+  function atQuery(ta) {
+    const pos = ta.selectionStart;
+    const m = ta.value.slice(0, pos).match(/(?:^|\s)@([^\s@]*)$/);
+    return m ? { q: m[1], start: pos - m[1].length - 1 } : null;
+  }
+  function hideFiles() { fileSuggest.classList.add('hidden'); fileItems = []; }
+  function renderFiles() {
+    fileSuggest.innerHTML = '';
+    fileItems.forEach((path, i) => {
+      const name = path.split('/').pop();
+      const dir = path.slice(0, path.length - name.length);
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'sug-row file' + (i === fileActive ? ' active' : '');
+      row.title = path;
+      row.innerHTML = '<span class="sug-file">' + escapeHtml(name) + '</span>'
+        + (dir ? '<span class="sug-path">' + escapeHtml(dir) + '</span>' : '');
+      row.addEventListener('mousedown', (e) => { e.preventDefault(); acceptFile(path); });
+      fileSuggest.appendChild(row);
+    });
+  }
+  function positionFiles(ta) {
+    const r = ta.getBoundingClientRect();
+    fileSuggest.style.left = Math.round(r.left) + 'px';
+    fileSuggest.style.bottom = Math.round(window.innerHeight - r.top + 4) + 'px';
+  }
+  function updateFiles(ta) {
+    fileTa = ta;
+    const c = atQuery(ta);
+    if (!c) { hideFiles(); return; }
+    vscode.postMessage({ type: 'atFiles', q: c.q, reqId: ++fileReq }); // resolved async by the extension
+  }
+  // Called when the extension returns matches.
+  function onFileResults(q, files, reqId) {
+    if (reqId !== fileReq || !fileTa) return;       // stale response
+    const c = atQuery(fileTa);
+    if (!c || c.q !== q) return;                    // query moved on
+    fileItems = (files || []).slice(0, 10);
+    if (!fileItems.length) { hideFiles(); return; }
+    fileActive = 0;
+    renderFiles();
+    positionFiles(fileTa);
+    fileSuggest.classList.remove('hidden');
+  }
+  function moveFiles(d) { fileActive = (fileActive + d + fileItems.length) % fileItems.length; renderFiles(); }
+  function acceptFile(path) {
+    const ta = fileTa;
+    const c = ta && atQuery(ta);
+    if (!ta || !c) { hideFiles(); return; }
+    const pos = ta.selectionStart, v = ta.value;
+    const insert = '@' + path + ' ';
+    ta.value = v.slice(0, c.start) + insert + v.slice(pos);
+    ta.selectionStart = ta.selectionEnd = c.start + insert.length;
+    hideFiles();
+    ta.focus();
+    ta.dispatchEvent(new Event('input'));
+  }
+  function handleFileKeydown(e) {
+    if (!fileOpen()) return false;
+    if (e.key === 'ArrowDown') { e.preventDefault(); moveFiles(1); return true; }
+    if (e.key === 'ArrowUp') { e.preventDefault(); moveFiles(-1); return true; }
+    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); acceptFile(fileItems[fileActive]); return true; }
+    if (e.key === 'Escape') { e.preventDefault(); hideFiles(); return true; }
+    return false;
+  }
+  function setupFileAutocomplete(ta) {
+    ta.addEventListener('input', () => updateFiles(ta));
+    ta.addEventListener('blur', () => setTimeout(hideFiles, 150));
+  }
+  setupFileAutocomplete(inputEl);
+
   attachBtn.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', () => {
     if (fileInput.files && fileInput.files.length) addFiles([...fileInput.files]);
@@ -2274,6 +2417,9 @@
     switch (msg.type) {
       case 'lang':
         applyLanguage(msg.lang, msg.bundle);
+        break;
+      case 'atFilesResult':
+        onFileResults(msg.q, msg.files, msg.reqId);
         break;
       case 'spellWords':
         if (window.LangSpell) window.LangSpell.setWords(msg.words || []);
