@@ -1,14 +1,20 @@
 # CI/CD for GitHub Actions — equivalent to the old azure-pipelines.yml.
 # Manual only: runs ONLY when triggered from the Actions tab ("Run workflow"). Never on push/PR.
-# Jobs: compile → test → package (→ .vsix artifact) → publish.
-#   - Run it on `master` to publish to the VS Code Marketplace, gated by MANUAL APPROVAL.
+# Jobs: compile → test → package (→ .vsix artifact) → publish-marketplace ∥ publish-openvsx.
+#   - Run it on `master` to publish; both publish jobs are gated by MANUAL APPROVAL and run in
+#     PARALLEL, so a failure in one is retried on its own (re-run that job) without re-approving or
+#     touching the other registry.
 #   - Run it on any other branch to just build/test/package (publish is skipped off master).
 #
-# Manual approval: the `publish` job targets the `marketplace` environment. Configure it once in
-#   Settings → Environments → New environment → "marketplace" → enable "Required reviewers" and add
-#   yourself. The job then pauses until you approve. (Free on public repos.)
-# Secret: add VSCE_PAT in Settings → Secrets and variables → Actions (Azure DevOps PAT,
-#   scope Marketplace → Manage, "All accessible organizations").
+# Targets BOTH registries, each with its OWN environment gate + token:
+#   - publish-marketplace → VS Code Marketplace (VS Code)            · env `marketplace`  · VSCE_PAT
+#   - publish-openvsx     → Open VSX (VSCodium / Cursor / Gitpod…)   · env `open-vsx`     · OVSX_PAT
+#
+# Configure each environment once in Settings → Environments → New environment → enable
+#   "Required reviewers" (add yourself) and add its token as an environment secret:
+#   - VSCE_PAT: Azure DevOps PAT, scope Marketplace → Manage ("All accessible organizations").
+#   - OVSX_PAT: Open VSX access token (open-vsx.org → Settings → Access Tokens). The `enavarre`
+#     namespace is auto-created on first run. Both publishes are idempotent (skip if version exists).
 # Versioning: the published version IS package.json's `version` (single source of truth). Bump it
 #   (semver) before pushing/merging to master to cut a release. The publish is idempotent: if that
 #   version is already on the Marketplace, it skips instead of failing (no error on re-runs).
@@ -69,12 +75,15 @@ jobs:
           name: vsix
           path: lang-chat.vsix
 
-  publish:
-    name: Publish to VS Code Marketplace
+  # The two publishes are SEPARATE, PARALLEL jobs (both `needs: package`), each behind its OWN
+  # environment gate and its OWN token. If one fails, re-run just that job — no re-approval, and the
+  # other registry is untouched. Both publishes are idempotent (skip if the version already exists).
+  publish-marketplace:
+    name: Publish · VS Code Marketplace
     needs: package
     if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    environment: marketplace # manual approval gate (required reviewers)
+    environment: marketplace # approval gate + VSCE_PAT
     steps:
       - uses: actions/setup-node@v5
         with:
@@ -94,6 +103,41 @@ jobs:
           if [ $CODE -ne 0 ]; then
             if echo "$OUT" | grep -qi "already exists"; then
               echo "This version is already on the Marketplace — nothing to publish (idempotent)."
+              exit 0
+            fi
+            exit $CODE
+          fi
+
+  publish-openvsx:
+    name: Publish · Open VSX
+    needs: package
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: open-vsx # approval gate + OVSX_PAT
+    steps:
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+      - uses: actions/download-artifact@v7
+        with:
+          name: vsix
+          path: .
+      # Best-effort: creates the `enavarre` namespace on first run, no-op once it exists.
+      - name: Ensure namespace
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: npx --yes ovsx create-namespace enavarre -p "$OVSX_PAT" || true
+      - name: Publish (idempotent)
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          set +e
+          OUT=$(npx --yes ovsx publish lang-chat.vsix -p "$OVSX_PAT" 2>&1)
+          CODE=$?
+          echo "$OUT"
+          if [ $CODE -ne 0 ]; then
+            if echo "$OUT" | grep -qiE "already exists|already published|same or greater"; then
+              echo "This version is already on Open VSX — nothing to publish (idempotent)."
               exit 0
             fi
             exit $CODE
