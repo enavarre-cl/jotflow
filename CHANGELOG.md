@@ -5,6 +5,28 @@ All notable changes to Parley. Format based on
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-06-21
+
+### Added
+- **Copy a Mermaid diagram as an image** — a "copy" button (top-right of each diagram) rasterizes
+  the SVG to a **PNG** (at 2×, on the current theme background) and writes it to the clipboard.
+
+### Changed
+- **Mermaid controls reworked to GitHub's layout**: a directional **pan pad** (arrows around a
+  centre **reset/centre** button) with a **zoom +/−** column bottom-right, and **fullscreen** +
+  **copy-as-image** top-right — all monochrome stroke icons, shown on hover.
+- **Diagrams now fill the bubble width** at their natural proportional height (was a tiny,
+  illegible thumbnail), and stay **crisp at any zoom** (dropped the cached-layer that blurred the
+  scaled SVG).
+
+### Fixed
+- **Trackpad scroll no longer hijacked**: a plain two-finger scroll over a diagram scrolls the chat
+  history as expected; zooming is **pinch / Ctrl·⌘+wheel** (or the buttons). Previously any wheel
+  event over a diagram zoomed it.
+- **Fullscreen fits and centres** the whole diagram on open, instead of showing it zoomed in and
+  anchored top-left.
+- Removed the fixed height cap that clipped tall diagrams into an unreadable horizontal strip.
+
 ## [1.1.3] - 2026-06-21
 
 ### Added
@@ -14,10 +36,8 @@ All notable changes to Parley. Format based on
   `securityLevel: 'strict'` and the VS Code light/dark theme. Diagrams render at settled points
   (final message / `streamEnd` / history), never mid-stream — a half-written block reads as a code
   block until it completes, and a syntax error degrades to the code plus a discreet note.
-- **GitHub-style pan/zoom viewer** for each diagram: wheel-to-zoom (toward the cursor),
-  drag-to-pan, double-click to reset, a hover toolbar (− / reset / + / fullscreen) and a fullscreen
-  lightbox (Esc / click-outside to close). Diagrams fill the bubble width at their natural
-  proportional height and stay crisp at any zoom (vector re-rasterized, no cached layer).
+- **Pan/zoom viewer** for each diagram: wheel-to-zoom (toward the cursor), drag-to-pan,
+  double-click to reset, a hover toolbar and a fullscreen lightbox (Esc / click-outside to close).
 
 ### Security
 - Webview CSP `style-src` now allows `'unsafe-inline'` (required for the `<style>` Mermaid embeds

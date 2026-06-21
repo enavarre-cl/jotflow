@@ -346,8 +346,50 @@
     }
   }
 
-  // Build the interactive viewer (GitHub-style): a clipped viewport with the SVG, a hover toolbar
-  // (zoom −/reset/+ and fullscreen), drag-to-pan, wheel-to-zoom and double-click-to-reset.
+  // GitHub-style controls: a directional pad (pan arrows) with a centre recenter button and a
+  // zoom +/− column bottom-right, plus fit + fullscreen top-right. Stroke icons, monochrome.
+  const MM_SVG = (inner) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
+  const MM_ICON = {
+    up: MM_SVG('<polyline points="6 15 12 9 18 15"/>'),
+    down: MM_SVG('<polyline points="6 9 12 15 18 9"/>'),
+    left: MM_SVG('<polyline points="15 18 9 12 15 6"/>'),
+    right: MM_SVG('<polyline points="9 18 15 12 9 6"/>'),
+    zoomIn: MM_SVG('<circle cx="11" cy="11" r="7"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>'),
+    zoomOut: MM_SVG('<circle cx="11" cy="11" r="7"/><line x1="8" y1="11" x2="14" y2="11"/>'),
+    recenter: MM_SVG('<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>'),
+    full: MM_SVG('<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>'),
+    copy: MM_SVG('<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
+    check: MM_SVG('<polyline points="20 6 9 17 4 12"/>'),
+    close: MM_SVG('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'),
+  };
+  function mmBtn(icon, title, fn) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'mermaid-btn';
+    b.innerHTML = icon;
+    b.title = title;
+    b.dataset.tip = title;
+    b.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
+    return b;
+  }
+  // 3×3 directional pad: ·/up/zoom-in · left/recenter/right · ·/down/zoom-out (empties keep the cross).
+  function mmPad(pz) {
+    const pad = document.createElement('div');
+    pad.className = 'mermaid-tools mermaid-pad';
+    const STEP = 80;
+    const gap = () => { const s = document.createElement('span'); s.className = 'mermaid-pad-gap'; return s; };
+    pad.appendChild(gap());
+    pad.appendChild(mmBtn(MM_ICON.up, t('Pan up'), () => pz.panBy(0, STEP)));
+    pad.appendChild(mmBtn(MM_ICON.zoomIn, t('Zoom in'), pz.zoomIn));
+    pad.appendChild(mmBtn(MM_ICON.left, t('Pan left'), () => pz.panBy(STEP, 0)));
+    pad.appendChild(mmBtn(MM_ICON.recenter, t('Reset / centre'), pz.fit));
+    pad.appendChild(mmBtn(MM_ICON.right, t('Pan right'), () => pz.panBy(-STEP, 0)));
+    pad.appendChild(gap());
+    pad.appendChild(mmBtn(MM_ICON.down, t('Pan down'), () => pz.panBy(0, -STEP)));
+    pad.appendChild(mmBtn(MM_ICON.zoomOut, t('Zoom out'), pz.zoomOut));
+    return pad;
+  }
+
   function mountMermaid(el, svg) {
     el.classList.add('rendered');
     el.innerHTML = '';
@@ -358,33 +400,62 @@
     canvas.innerHTML = svg;
     viewport.appendChild(canvas);
     const pz = makePanZoom(viewport, canvas);
-    el.appendChild(makeMermaidToolbar(pz, () => openMermaidFullscreen(svg)));
+    const top = document.createElement('div');
+    top.className = 'mermaid-tools mermaid-tools-top';
+    top.appendChild(mmBtn(MM_ICON.full, t('Fullscreen'), () => openMermaidFullscreen(svg)));
+    const copyBtn = mmBtn(MM_ICON.copy, t('Copy as image'), () => copyMermaidImage(svg, copyBtn));
+    top.appendChild(copyBtn);
+    el.appendChild(top);
+    el.appendChild(mmPad(pz));
     el.appendChild(viewport);
   }
 
-  function makeMermaidBtn(label, title, fn) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'mermaid-btn';
-    b.innerHTML = label;
-    b.title = title;
-    b.dataset.tip = title;
-    b.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
-    return b;
+  // Rasterize the diagram's SVG to a PNG and put it on the clipboard (like GitHub's "copy").
+  function copyMermaidImage(svg, btn) {
+    svgToPngBlob(svg).then((blob) => {
+      if (!blob || !navigator.clipboard || !window.ClipboardItem) return;
+      return navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(() => {
+        const prev = btn.innerHTML;
+        btn.innerHTML = MM_ICON.check; // brief ✓ confirmation
+        setTimeout(() => { btn.innerHTML = prev; }, 1200);
+      });
+    }).catch(() => {});
   }
-
-  function makeMermaidToolbar(pz, onFull) {
-    const bar = document.createElement('div');
-    bar.className = 'mermaid-toolbar';
-    bar.appendChild(makeMermaidBtn('&minus;', t('Zoom out'), pz.zoomOut));
-    bar.appendChild(makeMermaidBtn('&#8635;', t('Reset zoom'), pz.reset));
-    bar.appendChild(makeMermaidBtn('+', t('Zoom in'), pz.zoomIn));
-    if (onFull) bar.appendChild(makeMermaidBtn('&#9974;', t('Fullscreen'), onFull));
-    return bar;
+  function svgToPngBlob(svg) {
+    return new Promise((resolve, reject) => {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = svg;
+      const el = wrap.querySelector('svg');
+      if (!el) { resolve(null); return; }
+      let w = 0, h = 0;
+      const vb = el.getAttribute('viewBox');
+      if (vb) { const p = vb.split(/[\s,]+/).map(Number); w = p[2]; h = p[3]; }
+      if (!w || !h) { w = parseFloat(el.getAttribute('width')) || 800; h = parseFloat(el.getAttribute('height')) || 600; }
+      el.setAttribute('width', w); el.setAttribute('height', h); el.style.maxWidth = 'none';
+      const xml = new XMLSerializer().serializeToString(el);
+      const url = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)));
+      const img = new Image();
+      img.onload = () => {
+        const SCALE = 2; // crisp on HiDPI
+        const cv = document.createElement('canvas');
+        cv.width = Math.ceil(w * SCALE); cv.height = Math.ceil(h * SCALE);
+        const ctx = cv.getContext('2d');
+        // Match the on-screen background so dark-theme (light-text) diagrams stay legible.
+        let bg = getComputedStyle(document.body).backgroundColor;
+        if (!bg || bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)') bg = '#1e1e1e';
+        ctx.fillStyle = bg; ctx.fillRect(0, 0, cv.width, cv.height);
+        ctx.drawImage(img, 0, 0, cv.width, cv.height);
+        cv.toBlob((b) => resolve(b), 'image/png');
+      };
+      img.onerror = reject;
+      img.src = url;
+    });
   }
 
   // Pan/zoom controller over `canvas` (CSS transform) inside the clipped `viewport`.
-  function makePanZoom(viewport, canvas) {
+  // opts.wheelZoomAlways: zoom on any wheel (fullscreen). Default: only pinch / Ctrl/⌘+wheel, so a
+  // plain two-finger trackpad scroll keeps scrolling the chat history instead of zooming.
+  function makePanZoom(viewport, canvas, opts) {
     let scale = 1, tx = 0, ty = 0;
     const MIN = 0.2, MAX = 8;
     const clamp = (v) => Math.min(MAX, Math.max(MIN, v));
@@ -402,7 +473,11 @@
       zoomAt(r.width / 2, r.height / 2, factor);
     };
     viewport.addEventListener('wheel', (e) => {
-      e.preventDefault(); e.stopPropagation(); // own the wheel: don't scroll the chat or app-zoom
+      // Plain wheel (incl. Mac two-finger scroll) must scroll the chat, not zoom: only intercept
+      // for pinch / Ctrl/⌘+wheel (macOS sends ctrlKey for the pinch gesture).
+      const wantZoom = (opts && opts.wheelZoomAlways) || e.ctrlKey || e.metaKey;
+      if (!wantZoom) return; // let it bubble → the history scrolls
+      e.preventDefault(); e.stopPropagation();
       const r = viewport.getBoundingClientRect();
       zoomAt(e.clientX - r.left, e.clientY - r.top, e.deltaY < 0 ? 1.12 : 1 / 1.12);
     }, { passive: false });
@@ -423,10 +498,22 @@
     };
     viewport.addEventListener('pointerup', endDrag);
     viewport.addEventListener('pointercancel', endDrag);
-    viewport.addEventListener('dblclick', (e) => { e.preventDefault(); reset(); });
-    function reset() { scale = 1; tx = 0; ty = 0; apply(); }
-    apply();
-    return { zoomIn: () => zoomCenter(1.25), zoomOut: () => zoomCenter(1 / 1.25), reset };
+    viewport.addEventListener('dblclick', (e) => { e.preventDefault(); fit(); });
+    // Fit: scale the diagram to fit inside the viewport (never upscaling past full width) and centre
+    // it. Inline, the viewport already hugs the diagram so this just centres; in the big fullscreen
+    // viewport it scales the whole diagram down to fit — so opening fullscreen shows it all, centred.
+    function fit() {
+      const cw = canvas.offsetWidth, ch = canvas.offsetHeight; // untransformed layout size
+      const vw = viewport.clientWidth, vh = viewport.clientHeight;
+      if (!cw || !ch) return;
+      scale = clamp(Math.min(1, vw / cw, vh / ch));
+      tx = (vw - cw * scale) / 2;
+      ty = (vh - ch * scale) / 2;
+      apply();
+    }
+    const panBy = (dx, dy) => { tx += dx; ty += dy; apply(); };
+    apply(); // initial inline view: top-left, full width
+    return { zoomIn: () => zoomCenter(1.25), zoomOut: () => zoomCenter(1 / 1.25), fit, panBy };
   }
 
   // Fullscreen lightbox with its own pan/zoom. Esc or click-outside closes it.
@@ -441,17 +528,22 @@
     canvas.className = 'mermaid-canvas';
     canvas.innerHTML = svg;
     viewport.appendChild(canvas);
-    const pz = makePanZoom(viewport, canvas);
+    const pz = makePanZoom(viewport, canvas, { wheelZoomAlways: true }); // no history behind it
     const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
     const onKey = (e) => { if (e.key === 'Escape') close(); };
-    const bar = makeMermaidToolbar(pz, null);
-    bar.appendChild(makeMermaidBtn('&times;', t('Close'), close));
-    inner.appendChild(bar);
+    const top = document.createElement('div');
+    top.className = 'mermaid-tools mermaid-tools-top';
+    const copyBtn = mmBtn(MM_ICON.copy, t('Copy as image'), () => copyMermaidImage(svg, copyBtn));
+    top.appendChild(copyBtn);
+    top.appendChild(mmBtn(MM_ICON.close, t('Close'), close));
+    inner.appendChild(top);
+    inner.appendChild(mmPad(pz));
     inner.appendChild(viewport);
     overlay.appendChild(inner);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     document.addEventListener('keydown', onKey);
     document.body.appendChild(overlay);
+    requestAnimationFrame(() => pz.fit()); // once laid out: fit the whole diagram, centred
   }
 
   // Monochrome SVG icons (inherit currentColor → good contrast on any background).

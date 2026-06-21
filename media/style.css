@@ -538,29 +538,40 @@ mark.find-hit.current {
   max-width: 100% !important;
   height: auto !important;
 }
-/* Hover toolbar (also always visible in fullscreen) */
-.mermaid-toolbar {
+/* GitHub-style control groups: fit/fullscreen top-right, directional pad bottom-right.
+   Hidden until hover on the bubble; always visible in fullscreen. */
+.mermaid-tools {
   position: absolute;
-  top: 6px; right: 6px;
-  display: flex;
-  gap: 3px;
+  display: grid;
+  gap: 4px;
   opacity: 0;
   transition: opacity .15s ease;
   z-index: 2;
 }
-.mermaid-diagram.rendered:hover .mermaid-toolbar,
-.mermaid-modal .mermaid-toolbar { opacity: 1; }
+.mermaid-diagram.rendered:hover .mermaid-tools,
+.mermaid-modal .mermaid-tools { opacity: 1; }
+.mermaid-tools-top {
+  top: 8px; right: 8px;
+  grid-auto-flow: column;
+}
+.mermaid-pad {
+  right: 8px; bottom: 8px;
+  grid-template-columns: repeat(3, 30px);
+  grid-template-rows: repeat(3, 30px);
+}
+.mermaid-pad-gap { pointer-events: none; } /* empty cell keeping the cross shape */
 .mermaid-btn {
-  width: 26px; height: 26px;
+  width: 30px; height: 30px;
   display: flex; align-items: center; justify-content: center;
+  padding: 0;
   border: 1px solid var(--vscode-panel-border, rgba(127,127,127,.3));
   background: var(--vscode-editor-background, #1e1e1e);
   color: var(--vscode-foreground);
-  border-radius: 4px;
-  font-size: 15px; line-height: 1;
+  border-radius: 6px;
   cursor: pointer;
 }
 .mermaid-btn:hover { background: var(--vscode-toolbar-hoverBackground, rgba(127,127,127,.2)); }
+.mermaid-btn svg { width: 16px; height: 16px; display: block; }
 .mermaid-error {
   margin: 6px 10px;
   font-size: .85em;

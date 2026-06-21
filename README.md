@@ -30,8 +30,8 @@ management and neural text‑to‑speech without leaving the editor.
 - 💬 **Streaming** responses, token by token, with a **Stop** button and auto‑save after each turn.
 - 🧠 **Reasoning / thinking** panel for models that expose it.
 - 📊 **Markdown + Mermaid** in chat bubbles: ` ```mermaid ` blocks render as diagrams with a
-  GitHub‑style pan/zoom viewer (wheel zoom, drag to pan, fullscreen). The library is lazy‑loaded
-  only when a chat contains a diagram.
+  GitHub‑style viewer — pan pad, zoom (pinch / `Ctrl`·`⌘`+wheel), **fullscreen** and **copy‑as‑image**.
+  The library is lazy‑loaded only when a chat contains a diagram.
 - 🦙 **Embedded Ollama** + **Hugging Face GGUF explorer**: capability badges, quantization options
   and **downloads with progress** (shows size and free disk space first; retry/cancel).
 - 🔧 **Tools (function calling)**: native **workspace filesystem** + **MCP servers** — agentic loop.
