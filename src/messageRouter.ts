@@ -312,12 +312,12 @@ export async function routeMessage(msg: any, ctx: RouterCtx): Promise<void> {
           } finally { ctx.busyRef.value = false; }
           break;
         }
-        case 'ctx.setVariant':
+        case 'setVariant':
           if (!ctx.busyRef.value && Number.isInteger(msg.index) && Number.isInteger(msg.variant)) {
             await ctx.setVariant(msg.index, msg.variant);
           }
           break;
-        case 'ctx.deleteVariant':
+        case 'deleteVariant':
           if (!ctx.busyRef.value && Number.isInteger(msg.index) && Number.isInteger(msg.variant)) {
             if (!(await ctx.confirmDelete(msg, tr('Delete this variant?')))) break;
             await ctx.deleteVariant(msg.index, msg.variant);
