@@ -40,7 +40,10 @@ function inlineMd(text) {
   t = deLatex(t); // Inline LaTeX → Unicode (code-spans are already protected above)
   t = t.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, url) => {
     // Scheme allowlist: blocks javascript:/data:/vbscript:… (defense-in-depth on top of CSP).
-    const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(url);
+    // Strip leading control chars/whitespace BEFORE testing the scheme: browsers ignore them
+    // when resolving a URL, so `javascript:` would otherwise slip past and execute on click.
+    const probe = url.replace(/[\u0000-\u0020]+/g, '');
+    const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(probe);
     const href = scheme && !/^(https?|mailto)$/i.test(scheme[1]) ? '#' : url; // url is already escaped
     return '<a href="' + href + '">' + label + '</a>';
   });
