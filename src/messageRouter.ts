@@ -271,8 +271,14 @@ export async function routeMessage(msg: any, ctx: RouterCtx): Promise<void> {
             if (Number.isInteger(i) && i >= 0 && i < doc.messages.length) total = editActive(doc.messages[i], nth);
           } else {
             for (const m of doc.messages) total += editActive(m, 0); // 0 = all occurrences
+            // Replace All also rewrites the context summary text (it is shown as a bubble and may
+            // contain the term) — without destroying it: a content replace leaves coverage valid.
+            if (doc.summary && typeof doc.summary.text === 'string') {
+              const r = replaceInString(doc.summary.text, query, replacement, 0, fopts);
+              if (r.count) { doc.summary.text = r.content; total += r.count; }
+            }
           }
-          if (total) { doc.summary = undefined; await ctx.writeDoc(doc); ctx.sendHistory(); }
+          if (total) { await ctx.writeDoc(doc); ctx.sendHistory(); }
           break;
         }
         case 'regenerate':
