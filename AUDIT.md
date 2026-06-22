@@ -40,7 +40,7 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 
 ## 🔴 Críticos — seguridad y pérdida de datos
 
-> **Progreso de correcciones: 8 / 10 del Top 10 (faltan 2).** Marcados con ✅ los corregidos.
+> **Progreso de correcciones: 9 / 10 del Top 10 (falta 1).** Marcados con ✅ los corregidos.
 
 | Id | archivo:línea | Problema |
 |----|---------------|----------|
@@ -110,7 +110,7 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 
 ## 🟠 Motores locales (Ollama / Piper / descargas)
 
-- **[Alta] BUG `ollama/manager.ts:142,194`** — **Zombies**: con `shell:true` en Windows, `kill()` mata `cmd.exe`, no `ollama serve`. Sin SIGKILL escalado ni `taskkill /T` (T9).
+- **✅ [Alta] BUG `ollama/manager.ts:142,194` + `piper/manager.ts` — CORREGIDO** — nuevo helper `killProcessTree` (`src/procKill.ts`): en Windows `taskkill /pid /T /F` mata el árbol (el `shell:true` envuelve `cmd.exe`); en POSIX SIGTERM y escalada a SIGKILL tras 3s. Aplicado en `stop()` de Ollama y `stopServer()`/startup-fail de Piper. (escalada SIGKILL verificada en POSIX)
 - **[Alta] BUG `piper/manager.ts:130`** — El **`.onnx.json` de las voces se descarga sin verificar hash** (solo el `.onnx` se compara contra SHA pin). Config de fonemas sin pin (U6).
 - **[Alta] BUG `piper/manager.ts:122-141`** — Descarga de voz parcial: un `.onnx.json` corrupto previo (p. ej. HTML de error de HF) **nunca se revalida** en el reintento (`if (!existsSync(json))` lo salta).
 - **[Media] BUG `ollama/downloads.ts:204`** — **Colisión de nombres en `importDir`** entre descargas concurrentes (mismo basename de shard) → se corrompen mutuamente. Falta subcarpeta por id.
@@ -155,7 +155,7 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 6. ✅ **stream.ts:32** sin flush final → se pierde el chunk de usage/done — **HECHO**.
 7. ✅ **stream.ts:26** reader nunca liberado + abort no corta el stream — **HECHO**.
 8. ✅ **extension.ts:313** floating promise del router sin try/catch — **HECHO**.
-9. **Zombies** Ollama/Piper en Windows (`shell:true` + sin SIGKILL).
+9. ✅ **Zombies** Ollama/Piper en Windows (`shell:true` + sin SIGKILL) — **HECHO**.
 10. **C6** redirects de `downloadFile` sin validación SSRF.
 
 > Esto es una lista de trabajo, no un boletín. ~80 hallazgos; los marcados [verificado] se

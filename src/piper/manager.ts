@@ -7,6 +7,7 @@ import * as cp from 'child_process';
 import * as http from 'http';
 import * as net from 'net';
 import { downloadFile, sha256File } from '../download';
+import { killProcessTree } from '../procKill';
 import { tr } from '../i18n';
 
 // Release of the standalone Piper binary and asset name per platform/architecture.
@@ -342,7 +343,7 @@ export class PiperManager {
     try {
       await this.waitForServer(port, 20000);
     } catch (e: any) {
-      try { proc.kill(); } catch { /* noop */ }
+      killProcessTree(proc);
       throw new Error((stderr.trim().split('\n').slice(-3).join(' ') || e?.message) ?? 'piper http_server did not respond');
     }
     this.serverProc = proc;
@@ -419,7 +420,7 @@ export class PiperManager {
   stopServer(): void {
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
     const was = !!this.serverProc;
-    if (this.serverProc) { try { this.serverProc.kill(); } catch { /* noop */ } this.serverProc = null; }
+    if (this.serverProc) { killProcessTree(this.serverProc); this.serverProc = null; } // tree-kill + SIGKILL escalation
     this.serverPort = 0;
     if (was) this._onChange.fire();
   }

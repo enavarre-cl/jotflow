@@ -7,6 +7,7 @@ import * as cp from 'child_process';
 import { httpFetch } from '../http';
 import { downloadFile, sha256File } from '../download';
 import { OLLAMA_ASSET_SHA256, ollamaAsset, ollamaAssetUrl, assetFormat, ollamaBinName } from './assets';
+import { killProcessTree } from '../procKill';
 
 export type OllamaStatus = 'stopped' | 'downloading' | 'starting' | 'ready' | 'error';
 
@@ -191,7 +192,7 @@ export class OllamaManager {
   stop(): void {
     this.set('stopped');
     this._baseUrl = undefined;
-    if (this.proc) { try { this.proc.kill(); } catch { /* ignore */ } this.proc = null; }
+    if (this.proc) { killProcessTree(this.proc); this.proc = null; } // tree-kill: shell:true on Windows wraps cmd.exe
   }
 
   /** Is the private binary downloaded? */
