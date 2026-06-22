@@ -57,12 +57,19 @@ function resolveInWorkspace(p: string): string {
   return chosen.abs;
 }
 
-/** Paths that are NOT allowed to be written to (execution / sensitive config). */
-function assertWritable(abs: string, root: string): void {
-  const rel = path.relative(root, abs).split(path.sep);
-  const top = rel[0];
-  if (top === '.git' || top === '.vscode') {
-    throw new Error(`Writing not allowed in ${top}/ (sensitive path).`);
+/**
+ * Paths that are NOT allowed to be written to. Beyond VCS/editor config, this blocks the MCP
+ * server configs (`.mcp.json` and `.mcp/`): they declare commands that get spawned, so letting a
+ * tool overwrite them would be a deferred RCE vector executed on the next turn. Checked against
+ * EVERY workspace folder (multi-root) so the file can't be reached via a sibling folder root.
+ */
+const NON_WRITABLE_TOP = new Set(['.git', '.vscode', '.mcp', '.mcp.json']);
+function assertWritable(abs: string): void {
+  for (const f of vscode.workspace.workspaceFolders ?? []) {
+    const top = path.relative(f.uri.fsPath, abs).split(path.sep)[0];
+    if (NON_WRITABLE_TOP.has(top)) {
+      throw new Error(`Writing not allowed in ${top} (sensitive path).`);
+    }
   }
 }
 
@@ -152,7 +159,7 @@ const BUILTIN: { schema: ToolSchema; run: (args: any, signal?: AbortSignal) => P
     run: async (a) => {
       if (!vscode.workspace.isTrusted) throw new Error('Writing disabled: the workspace is not trusted.');
       const file = resolveInWorkspace(a?.path ?? '');
-      assertWritable(file, workspaceRoot()); // no .git/ or .vscode/
+      assertWritable(file); // no .git/ .vscode/ .mcp.json .mcp/
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, String(a?.content ?? ''), 'utf8');
       return `Written: ${a.path} (${Buffer.byteLength(String(a?.content ?? ''))} bytes)`;
