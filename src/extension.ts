@@ -16,12 +16,12 @@ import {
   parseDoc,
   serializeDoc,
   defaultDoc,
-  resolveGenerationParams,
-  repairTrailingToolChain,
 } from './chatDocument';
 import { FindOpts, replaceInString } from './findReplace';
 import { renderWebviewHtml } from './webviewHtml';
-import { addUsage, estTokens, applyVariantToMessage, msgTokens, isHiddenToolMsg, sanitizeAttachments, errMsg } from './chatHelpers';
+import { AttachmentStore } from './attachmentStore';
+import { runInference as runInferenceImpl } from './inference';
+import { addUsage, estTokens, applyVariantToMessage, isHiddenToolMsg, sanitizeAttachments, errMsg } from './chatHelpers';
 import { ToolHub } from './tools';
 import { wavData, concatWavs, splitForTTS } from './audio';
 import { initProxy } from './http';
@@ -307,7 +307,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
 
     // Text we write ourselves: to distinguish our own edits from external ones.
     let lastWritten: string | null = null;
-    let abort: AbortController | undefined;
+    const abortRef: { current: AbortController | undefined } = { current: undefined };
     let busy = false; // an inference is in progress: reject new requests
     let ttsToken = 0; // identifies the current TTS request; when it changes, the chunk loop is cancelled
     let currentPiperProc: any = null; // piper process in flight, so we can kill it on cancel
@@ -368,7 +368,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
         await document.save();
       }
       // Cleans up orphan attachments from the sidecar after each persisted change.
-      if (prune) await pruneAttach(doc);
+      if (prune) await attachStore.prune(doc);
     };
 
     const pushDoc = (): void => {
@@ -577,99 +577,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
     };
 
     // ---- Attachment sidecar (.attach): blobs live here, the .chat only holds references ----
-    const attachUri = (): vscode.Uri => {
-      const stem = path.basename(document.uri.fsPath).replace(/\.chat$/i, '');
-      return vscode.Uri.joinPath(document.uri, '..', stem + '.attach');
-    };
-    let attachCache: Record<string, any> | null = null;
-    let attachLoadFailed = false;        // sidecar exists but couldn't be parsed → never clobber it
-    let attachWriteChain: Promise<void> = Promise.resolve(); // serialize sidecar writes
-    const loadAttach = (): Record<string, any> => {
-      if (attachCache) return attachCache;
-      let raw: string;
-      try {
-        raw = fs.readFileSync(attachUri().fsPath, 'utf8');
-      } catch (e: any) {
-        attachCache = {};
-        attachLoadFailed = e?.code !== 'ENOENT'; // ENOENT = no sidecar yet (safe to create fresh)
-        return attachCache;
-      }
-      try {
-        attachCache = JSON.parse(raw);
-      } catch {
-        attachCache = {};
-        attachLoadFailed = true; // existing-but-corrupt (e.g. a half-written read): don't overwrite it
-      }
-      return attachCache!;
-    };
-    // Atomic write (temp file + rename) so a concurrent reader never sees a half-written sidecar and
-    // resets it to {} (which a later save/prune would then persist, losing every blob). Serialized.
-    const writeSidecar = (store: Record<string, any>): Promise<void> => {
-      const run = attachWriteChain.then(async () => {
-        const main = attachUri();
-        const tmp = main.with({ path: main.path + '.tmp' });
-        await vscode.workspace.fs.writeFile(tmp, Buffer.from(JSON.stringify(store) + '\n', 'utf8'));
-        await vscode.workspace.fs.rename(tmp, main, { overwrite: true });
-      });
-      attachWriteChain = run.catch(() => {}); // keep the chain alive even if one write fails
-      return run;
-    };
-    const saveAttach = async (store: Record<string, any>): Promise<void> => {
-      attachCache = store;
-      attachLoadFailed = false; // we now hold an authoritative store
-      await writeSidecar(store);
-    };
-    // Saves new blobs in the sidecar and returns attachments with only {kind,name,mime,ref}.
-    const storeAttachments = async (atts: any[]): Promise<any[]> => {
-      if (!atts.length) return [];
-      const store = loadAttach();
-      const refs: any[] = [];
-      for (const a of atts) {
-        const id = `att_${Date.now().toString(36)}${Math.floor(Math.random() * 1e9).toString(36)}`;
-        const bytes = typeof a.data === 'string' ? a.data.length : 0;
-        store[id] = { kind: a.kind, name: a.name, mime: a.mime, data: a.data, bytes };
-        refs.push({ kind: a.kind, name: a.name, mime: a.mime, ref: id, bytes }); // bytes → token budgeting
-      }
-      await saveAttach(store);
-      return refs;
-    };
-    // Stores images returned by an image-output model as image attachments (sidecar refs).
-    const storeGenImages = async (images: { mime: string; data: string }[]): Promise<any[]> => {
-      const ext = (mime: string) => (/jpeg|jpg/i.test(mime) ? 'jpg' : /webp/i.test(mime) ? 'webp' : /gif/i.test(mime) ? 'gif' : 'png');
-      return storeAttachments(images.map((im, i) => ({
-        kind: 'image', name: `image-${i + 1}.${ext(im.mime)}`, mime: im.mime || 'image/png', data: im.data,
-      })));
-    };
-    // Returns an attachment with `data` resolved (from the sidecar if a ref, or legacy inline).
-    const resolveAtt = (a: any): any => {
-      if (typeof a?.data === 'string') return a; // legacy inline
-      if (a?.ref) {
-        const e = loadAttach()[a.ref];
-        if (e) return { kind: a.kind, name: a.name || e.name, mime: a.mime || e.mime, data: e.data };
-      }
-      return a;
-    };
-    // Removes from the sidecar entries no longer referenced by any message (on delete/merge/fork).
-    const pruneAttach = async (doc: ChatDoc): Promise<void> => {
-      if (!attachCache) return;        // only if attachments have been/were loaded
-      if (attachLoadFailed) return;    // store unreadable: never delete from a set we couldn't read
-      const used = new Set<string>();
-      for (const m of doc.messages) {
-        for (const a of (m.attachments ?? [])) if (a.ref) used.add(a.ref);
-        for (const v of (m.variants ?? [])) for (const a of (v.attachments ?? [])) if (a.ref) used.add(a.ref);
-      }
-      let changed = false;
-      for (const id of Object.keys(attachCache)) {
-        if (!used.has(id)) { delete attachCache[id]; changed = true; }
-      }
-      if (!changed) return;
-      if (Object.keys(attachCache).length === 0) {
-        await attachWriteChain.catch(() => {}); // let pending writes settle before deleting
-        try { await vscode.workspace.fs.delete(attachUri()); } catch { /* no longer exists */ }
-      } else {
-        await writeSidecar(attachCache);
-      }
-    };
+    const attachStore = new AttachmentStore(document.uri);
 
     // Copy of the doc with resolved attachments (for the webview), without touching the persisted doc.
     // `sysPromptTokens` = tokens of the EFFECTIVE system prompt (file content included): the webview
@@ -678,7 +586,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       ...doc,
       sysPromptTokens: estTokens(readSystemPrompt(doc).text),
       messages: doc.messages.map((m) =>
-        m.attachments ? { ...m, attachments: m.attachments.map(resolveAtt) } : m
+        m.attachments ? { ...m, attachments: m.attachments.map(attachStore.resolve) } : m
       ),
     });
 
@@ -758,7 +666,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
         { role: 'system', content: 'You are an assistant that summarizes conversations to preserve context.' },
         { role: 'user', content: instruction },
       ];
-      abort = new AbortController();
+      abortRef.current = new AbortController();
       let text = '';
       let reasoning = '';
       try {
@@ -767,13 +675,13 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
           wire,
           { temperature: 0.3, maxTokens: 1024 },
           {
-            signal: abort.signal,
+            signal: abortRef.current!.signal,
             onDelta: (d) => { text += d; },
             onReasoning: (d) => { reasoning += d; },
           }
         );
       } finally {
-        abort = undefined;
+        abortRef.current = undefined;
       }
       // Some reasoning models return text only in the thinking channel.
       return (text.trim() || reasoning.trim());
@@ -807,192 +715,11 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
 
     // Runs a streaming inference over `context`. Returns the accumulated result.
     // With `allowTools`, runs the agentic loop (MCP tools / native filesystem).
-    const runInference = async (
-      doc: ChatDoc,
-      context: ChatMessage[],
-      allowTools = false
-    ): Promise<{ answer: string; thinking: string; failed: boolean; usage?: any; images: { mime: string; data: string }[] }> => {
-      // Copy + drop any trailing unfinished tool exchange (crash/reload recovery) so we never replay
-      // an assistant tool_call without its tool reply → provider 400. On a normal send this is a no-op.
-      let history = context.slice();
-      repairTrailingToolChain(history);
-      let summaryText = '';
-      // Resolve ONCE: used both to budget the trimming below and as the system message sent. Must be
-      // the effective prompt (file content included) or the budget under-counts and can overflow the window.
-      const sysPrompt = resolveSystemPrompt(doc);
-
-      const cmCfg = doc.params.contextMessages;
-      const lastNActive = cmCfg.enabled && cmCfg.value > 0;
-      if (lastNActive) {
-        // PRIORITY: "last N messages" wins over the summary (which becomes stale as the chat advances).
-        // The token budget (auto = 75% of the model window) also caps: the tighter cut wins
-        // (to avoid blowing the window).
-        const modelCtx = modelContexts[doc.model];
-        const budget = modelCtx ? Math.floor(modelCtx * 0.75) : 16000;
-        let acc = estTokens(sysPrompt);
-        let start = history.length;
-        for (let i = history.length - 1; i >= 0; i--) {
-          if (history.length - i > cmCfg.value) break;            // cap: N messages
-          const tk = msgTokens(history[i]);
-          if (acc + tk > budget && start < history.length) break; // cap: token budget
-          acc += tk;
-          start = i;
-        }
-        history = history.slice(start);
-      } else if (doc.params.autoSummary) {
-        // TOKEN-based compaction against the real model window (auto = 75% of the window).
-        const modelCtx = modelContexts[doc.model];
-        const budget = modelCtx ? Math.floor(modelCtx * 0.75) : 16000;
-
-        // Start from the existing summary: never resend what has already been summarised.
-        let upTo = doc.summary ? doc.summary.upTo : 0;
-        summaryText = doc.summary?.text ?? '';
-
-        const fixed = estTokens(sysPrompt) + estTokens(summaryText);
-        let total = fixed;
-        for (let i = upTo; i < history.length; i++) total += msgTokens(history[i]);
-
-        if (total > budget) {
-          // Keeps recent messages that fit within ~half the budget.
-          const keepBudget = Math.max(1, Math.floor(budget / 2));
-          let acc = 0;
-          let keepFrom = history.length;
-          for (let i = history.length - 1; i >= upTo; i--) {
-            const t = msgTokens(history[i]);
-            if (acc + t > keepBudget && keepFrom < history.length) break;
-            acc += t;
-            keepFrom = i;
-          }
-          const targetUpTo = Math.max(upTo, keepFrom);
-          if (targetUpTo > upTo) {
-            try {
-              summaryText = await ensureSummary(doc, history, targetUpTo);
-              upTo = targetUpTo;
-            } catch (err: any) {
-              webview.postMessage({ type: 'notice', message: tr('⚠️ Could not summarize context: ') + errMsg(err) });
-              summaryText = doc.summary?.text ?? '';
-            }
-          }
-        }
-        history = history.slice(upTo);
-      }
-
-      // After trimming, don't start with assistant/tool (would break function calling and Anthropic/Gemini).
-      while (history.length && (history[0].role === 'assistant' || history[0].role === 'tool')) {
-        history = history.slice(1);
-      }
-
-      const wire: ChatMessage[] = [];
-      if (sysPrompt.trim()) wire.push({ role: 'system', content: sysPrompt });
-      if (summaryText) {
-        wire.push({ role: 'system', content: `Summary of the previous conversation (compacted context):\n${summaryText}` });
-      }
-      // Role/content/images are sent and, if present, tool fields. Thinking is OMITTED.
-      wire.push(...history.map((m) => {
-        let content = m.content;
-        const resolved = (m.attachments ?? []).map(resolveAtt);
-        const media = resolved.filter((a) => a.kind === 'image' || a.kind === 'document');
-        for (const f of resolved.filter((a) => a.kind === 'text')) {
-          content += `\n\n[Attached file: ${f.name}]\n${f.data ?? ''}`;
-        }
-        const wm: ChatMessage = { role: m.role, content };
-        if (media.length) wm.attachments = media;
-        if (m.toolCalls) wm.toolCalls = m.toolCalls;
-        if (m.toolCallId) wm.toolCallId = m.toolCallId;
-        if (m.toolName) wm.toolName = m.toolName;
-        return wm;
-      }));
-
-      const params = resolveGenerationParams(doc.params);
-      if (allowTools && doc.params.tools) {
-        try {
-          await toolHub.ensureStarted();
-          const schemas = toolHub.schemas();
-          if (schemas.length) params.tools = schemas;
-          if (toolHub.mcpErrors().length) {
-            webview.postMessage({ type: 'notice', message: tr('⚠️ Some MCP servers failed to start: ') + toolHub.mcpErrors().join('; ') });
-          }
-        } catch { /* no tools if it fails */ }
-      }
-
-      let answer = '';
-      let thinking = '';
-      let failed = false;
-      let aborted = false;
-      let usage: any = undefined;
-      let images: { mime: string; data: string }[] = [];
-
-      // Agentic loop: if the model requests tools, they are executed and fed back.
-      // A single AbortController for the ENTIRE turn: so Stop also cuts between
-      // iterations and before executing the next tool (not only during chat()).
-      const ac = new AbortController();
-      abort = ac;
-      // Max agentic tool-loop iterations (configurable). 0 = unlimited: the loop still ends when the
-      // model stops requesting tools or the user presses Stop (the AbortController breaks it).
-      const cfgIters = vscode.workspace.getConfiguration('parley').get<number>('tools.maxIterations', 8);
-      const MAX_ITERS = Number.isFinite(cfgIters) && cfgIters >= 0 ? Math.floor(cfgIters) : 8;
-      for (let iter = 0; MAX_ITERS === 0 || iter < MAX_ITERS; iter++) {
-        if (ac.signal.aborted) { aborted = true; break; }
-        const id = `m_${Date.now().toString(36)}_${iter}`;
-        webview.postMessage({ type: 'streamStart', id });
-        let res: { answer: string; thinking: string; toolCalls?: any[]; usage?: any; images?: { mime: string; data: string }[] } = { answer: '', thinking: '' };
-        try {
-          res = await buildProvider(doc.provider).chat(doc.model, wire, params, {
-            signal: ac.signal,
-            onDelta: (delta) => { webview.postMessage({ type: 'streamDelta', id, delta }); },
-            onReasoning: (delta) => { webview.postMessage({ type: 'streamReasoning', id, delta }); },
-          });
-        } catch (err: any) {
-          if (ac.signal.aborted) aborted = true;
-          else { webview.postMessage({ type: 'error', message: errMsg(err) }); failed = true; }
-        }
-        webview.postMessage({ type: 'streamEnd', id });
-        if (res.usage) usage = addUsage(usage, res.usage);
-        if (res.images?.length) images = images.concat(res.images);
-        answer = res.answer;
-        thinking = res.thinking;
-
-        if (failed || aborted || !res.toolCalls || !res.toolCalls.length) break;
-
-        // The model requested tools: persist the call, execute, and feed back.
-        const callMsg: ChatMessage = { role: 'assistant', content: res.answer, toolCalls: res.toolCalls };
-        if (res.thinking) callMsg.thinking = res.thinking;
-        wire.push(callMsg);
-        const fresh = getDoc();
-        fresh?.messages.push(callMsg);
-
-        for (const tc of res.toolCalls) {
-          if (ac.signal.aborted) { aborted = true; break; } // Stop before the next tool
-          let out: string;
-          let args: any = {};
-          try { args = JSON.parse(tc.arguments || '{}'); } catch { /* empty args */ }
-          webview.postMessage({ type: 'toolCall', name: tc.name, args: tc.arguments || '' });
-          try {
-            out = await toolHub.call(tc.name, args, ac.signal); // Stop cancels an in-flight tool too
-          } catch (e: any) {
-            out = 'Error: ' + (e?.message ?? e);
-          }
-          webview.postMessage({ type: 'toolResult', name: tc.name, content: out });
-          const toolMsg: ChatMessage = { role: 'tool', content: out, toolCallId: tc.id, toolName: tc.name };
-          wire.push(toolMsg);
-          fresh?.messages.push(toolMsg);
-        }
-        // Intermediate write in the tool-loop: no save() or prune (done once at the end of the turn).
-        if (fresh) await writeDoc(fresh, { save: false, prune: false });
-        sendHistory();
-        if (aborted) break;
-        // next iteration: the model sees the results
-      }
-      if (abort === ac) abort = undefined; // release the turn's controller
-
-      if (!failed && !answer && !thinking && !images.length && !aborted) {
-        webview.postMessage({
-          type: 'error',
-          message: tr('The model returned no content. Try another model; on OpenRouter, check the key\'s credits/limits.'),
-        });
-      }
-      return { answer, thinking, failed, usage, images };
-    };
+    const runInference = (doc: ChatDoc, context: ChatMessage[], allowTools = false) =>
+      runInferenceImpl(doc, context, allowTools, {
+        webview, toolHub, modelContexts, resolveSystemPrompt, ensureSummary,
+        resolveAttachment: attachStore.resolve, getDoc, writeDoc, sendHistory, abortRef,
+      });
 
     const handleSend = async (text: string, attachments?: any[]): Promise<void> => {
       text = (text ?? '').trim();
@@ -1006,7 +733,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       }
 
       const userMsg: ChatMessage = { role: 'user', content: text };
-      if (atts.length) userMsg.attachments = await storeAttachments(atts); // blobs → .attach, message holds only refs
+      if (atts.length) userMsg.attachments = await attachStore.store(atts); // blobs → .attach, message holds only refs
       doc.messages.push(userMsg);
       const onlyUser = doc.messages.filter((m) => m.role === 'user').length === 1;
       if (onlyUser && (!doc.title || doc.title === 'New chat')) {
@@ -1022,7 +749,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
           const m: ChatMessage = { role: 'assistant', content: answer };
           if (thinking) m.thinking = thinking;
           if (usage) m.usage = usage;
-          if (images.length) m.attachments = await storeGenImages(images);
+          if (images.length) m.attachments = await attachStore.storeGenImages(images);
           fresh.messages.push(m);
           await writeDoc(fresh);
         }
@@ -1049,7 +776,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
           const m: ChatMessage = { role: 'assistant', content: answer };
           if (thinking) m.thinking = thinking;
           if (usage) m.usage = usage;
-          if (images.length) m.attachments = await storeGenImages(images);
+          if (images.length) m.attachments = await attachStore.storeGenImages(images);
           fresh.messages.push(m);
           await writeDoc(fresh);
         }
@@ -1100,7 +827,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
         for (const v of (m.variants ?? [])) for (const a of (v.attachments ?? [])) if (a.ref) refIds.add(a.ref);
       }
       if (refIds.size) {
-        const src = loadAttach();
+        const src = attachStore.load();
         const dst: Record<string, any> = {};
         for (const id of refIds) if (src[id]) dst[id] = src[id];
         const forkStem = path.basename(target.fsPath).replace(/\.chat$/i, '');
@@ -1172,7 +899,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       const variant: any = { content: answer };
       if (thinking) variant.thinking = thinking;
       if (usage) variant.usage = usage;
-      if (images.length) variant.attachments = await storeGenImages(images);
+      if (images.length) variant.attachments = await attachStore.storeGenImages(images);
       target.variants.push(variant);
       target.active = target.variants.length - 1;
       applyVariantToMessage(target, variant);
@@ -1293,7 +1020,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
           try { await handleSend(msg.text, msg.attachments); } finally { busy = false; }
           break;
         case 'stop':
-          abort?.abort();
+          abortRef.current?.abort();
           break;
         case 'tts':
           await synthPiper(String(msg.text ?? ''), Number(msg.rate) || 1, String(msg.voice ?? ''), Number(msg.id) || 0);
@@ -1519,7 +1246,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
           const doc = getDoc();
           const m = doc?.messages[msg.index];
           if (!m) break;
-          const img = (m.attachments ?? []).map(resolveAtt).find((a) => a.kind === 'image' && a.data);
+          const img = (m.attachments ?? []).map(attachStore.resolve).find((a) => a.kind === 'image' && a.data);
           if (!img) break;
           const ext = /jpe?g/i.test(img.mime) ? 'jpg' : /webp/i.test(img.mime) ? 'webp' : /gif/i.test(img.mime) ? 'gif' : 'png';
           // Default to the workspace folder (fall back to the .chat's folder, then home).
@@ -1658,7 +1385,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
     // parley.language changed in settings → re-translate the UI live (no reload needed).
     const onLang = this.onLangChanged(() => pushLang());
     panel.onDidDispose(() => {
-      abort?.abort();
+      abortRef.current?.abort();
       onMsg.dispose();
       onChange.dispose();
       onState.dispose();
