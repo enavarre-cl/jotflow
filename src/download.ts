@@ -2,10 +2,33 @@
 import * as fs from 'fs';
 import * as https from 'https';
 import * as crypto from 'crypto';
+import * as dns from 'dns';
+import { isIP } from 'net';
+import { ipIsPrivate } from './net';
 
 /** SHA256 (hex) of a file. */
 export function sha256File(p: string): string {
   return crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+}
+
+/**
+ * DNS lookup that rejects internal/private IPs and connects to the validated address — used for
+ * every request (initial AND each redirect). Without it, a malicious `Location:` (e.g. a mirror
+ * redirecting to http://169.254.169.254/ or a host on the LAN) would be followed blindly (SSRF).
+ * Validating at connect time (not just the hostname) also avoids a DNS-rebinding TOCTOU window.
+ */
+function safeLookup(
+  hostname: string,
+  options: any,
+  cb: (err: NodeJS.ErrnoException | null, address?: string, family?: number) => void,
+): void {
+  dns.lookup(hostname, { ...(options || {}), all: true }, (err, addresses: any) => {
+    if (err) return cb(err);
+    const list: { address: string; family: number }[] = Array.isArray(addresses) ? addresses : [addresses];
+    const safe = list.find((a) => !ipIsPrivate(a.address));
+    if (!safe) return cb(new Error('Internal/private host blocked (SSRF).') as NodeJS.ErrnoException);
+    cb(null, safe.address, safe.family);
+  });
 }
 
 export interface DownloadOpts {
@@ -23,12 +46,22 @@ export function downloadFile(url: string, destPath: string, opts: DownloadOpts =
     if (signal?.aborted) return reject(new Error('aborted'));
     let u: URL;
     try { u = new URL(url); } catch { return reject(new Error('Invalid URL: ' + url)); }
-    const reqOpts = {
+    // A literal-IP host (e.g. a redirect to http://169.254.169.254/) bypasses the custom lookup
+    // below — Node does no DNS for an IP literal — so block private IPs explicitly here too.
+    // u.hostname keeps the brackets for IPv6 literals ([::1]); strip them before the check.
+    const hostIp = u.hostname.replace(/^\[|\]$/g, '');
+    if (isIP(hostIp) && ipIsPrivate(hostIp)) {
+      return reject(new Error('Internal/private host blocked (SSRF).'));
+    }
+    const reqOpts: https.RequestOptions = {
       protocol: u.protocol,
       hostname: u.hostname,
       port: u.port || undefined,
       path: u.pathname + u.search,
       headers: { 'User-Agent': 'parley', Accept: '*/*' },
+      // reject internal/private IPs (anti-SSRF) on this request and every redirect. Cast: Node's
+      // LookupFunction typing is stricter than the runtime contract safeLookup honours.
+      lookup: safeLookup as https.RequestOptions['lookup'],
     };
     const req = https
       .get(reqOpts, (res: any) => {

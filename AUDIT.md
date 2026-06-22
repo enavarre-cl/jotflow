@@ -40,7 +40,8 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 
 ## 🔴 Críticos — seguridad y pérdida de datos
 
-> **Progreso de correcciones: 9 / 10 del Top 10 (falta 1).** Marcados con ✅ los corregidos.
+> **Progreso de correcciones: 10 / 10 del Top 10 ✅ COMPLETO.** Marcados con ✅ los corregidos.
+> (Quedan hallazgos fuera del Top 10 en las secciones por subsistema + el bug reportado por el usuario.)
 
 | Id | archivo:línea | Problema |
 |----|---------------|----------|
@@ -49,7 +50,7 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 | ✅ C3 | `src/tools.ts:60-74` | **CORREGIDO** — `assertWritable` ahora bloquea `.mcp.json` y `.mcp/` (además de `.git`/`.vscode`), contra cada folder en multi-root → cierra el RCE diferido vía `loadServerConfigs`. |
 | ✅ C4 | `src/webviewHtml.ts:214-217` | **CORREGIDO** — nuevo helper `jsonForScript()` escapa `<`/`>`/U+2028/U+2029 antes de interpolar en el `<script>` inline; un voice id con `</script>` ya no rompe el script. (verificado) |
 | C5 | `src/messageRouter.ts:133` | **Path traversal**: el regex de validación de `voice` no está anclado al final → `en_US-../../../etc` pasa el `test` y llega a `removePiperVoice`. |
-| C6 | `src/download.ts:41` | **Redirects sin validación SSRF**: `downloadFile` sigue 6 redirects sin comprobar host/IP (a diferencia de `safeWebFetch`). Un `Location:` a `169.254.169.254` o red interna se sigue. |
+| ✅ C6 | `src/download.ts:20-64` | **CORREGIDO** — `downloadFile` valida IP en cada petición y redirect: chequeo explícito de IP literal privada + `lookup` custom (`safeLookup`) que rechaza IPs privadas en connect-time. (5/5 verificado: metadata 169.254, localhost, LAN, IPv6 `::1`/`fc00::1`) |
 | ✅ C7 | `src/inference.ts:163-166` | **CORREGIDO** — `answer`/`thinking` solo se actualizan desde un `chat()` que completó (`!failed && !aborted`); un fallo/abort ya no pisa la respuesta acumulada con el `res` vacío por defecto. |
 | C8 | `src/chatDocument.ts:147-176` | `parseDoc` **revienta con un `.chat` que sea JSON `null`** (`raw.summary` → TypeError) y **descarta campos desconocidos en el round-trip** → edición manual o versión futura pierde datos silenciosamente. |
 | C9 | `src/attachmentStore.ts:43-92` | Escritura "atómica" usa **`.tmp` de nombre fijo** → dos ventanas con el mismo `.chat` se corrompen; y el **cache nunca se invalida** → sirve blobs obsoletos. |
@@ -156,7 +157,7 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 7. ✅ **stream.ts:26** reader nunca liberado + abort no corta el stream — **HECHO**.
 8. ✅ **extension.ts:313** floating promise del router sin try/catch — **HECHO**.
 9. ✅ **Zombies** Ollama/Piper en Windows (`shell:true` + sin SIGKILL) — **HECHO**.
-10. **C6** redirects de `downloadFile` sin validación SSRF.
+10. ✅ **C6** redirects de `downloadFile` sin validación SSRF — **HECHO**.
 
 > Esto es una lista de trabajo, no un boletín. ~80 hallazgos; los marcados [verificado] se
 > confirmaron ejecutando el código. Si quieres, ataco cualquiera en orden de severidad.
