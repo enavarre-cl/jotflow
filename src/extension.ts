@@ -3,8 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as cp from 'child_process';
-import * as crypto from 'crypto';
-import { buildProvider, chatDefaults, providerInfo, isProviderId, setApiKeyOverride, setManagedOllamaBaseUrl, ChatMessage, ChatVariant, ProviderId } from './providers';
+import { buildProvider, chatDefaults, providerInfo, isProviderId, setApiKeyOverride, setManagedOllamaBaseUrl, ChatMessage, ProviderId } from './providers';
 import { OllamaManager } from './ollama/manager';
 import { DownloadManager } from './ollama/downloads';
 import { ModelCardCache } from './ollama/cards';
@@ -21,6 +20,7 @@ import {
   repairTrailingToolChain,
 } from './chatDocument';
 import { FindOpts, replaceInString } from './findReplace';
+import { addUsage, estTokens, applyVariantToMessage, msgTokens, isHiddenToolMsg, sanitizeAttachments, errMsg, makeNonce } from './chatHelpers';
 import { ToolHub } from './tools';
 import { wavData, concatWavs, splitForTTS } from './audio';
 import { initProxy } from './http';
@@ -1848,69 +1848,11 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
   <script nonce="${nonce}" src="${uri('i18n.js')}"></script>
   <script nonce="${nonce}" src="${uri('spell-engine.js')}"></script>
   <script nonce="${nonce}" src="${uri('spell.js')}"></script>
+  <script nonce="${nonce}" src="${uri('markdown.js')}"></script>
   <script nonce="${nonce}" src="${uri('main.js')}"></script>
 </body>
 </html>`;
   }
-}
-
-/** Adds two token-usage records together. */
-function addUsage(a: any, b: any): any {
-  if (!b) return a;
-  if (!a) return { ...b };
-  const out: any = {
-    promptTokens: (a.promptTokens || 0) + (b.promptTokens || 0),
-    completionTokens: (a.completionTokens || 0) + (b.completionTokens || 0),
-    totalTokens: (a.totalTokens || 0) + (b.totalTokens || 0),
-  };
-  const cost = (a.cost || 0) + (b.cost || 0);
-  if (cost) out.cost = cost;
-  return out;
-}
-
-/** Rough token estimate (~4 characters per token). */
-function estTokens(s?: string): number {
-  return s ? Math.ceil(s.length / 4) : 0;
-}
-/** Mirrors a variant's fields onto its parent message (content always; thinking/usage/attachments
- *  set when present, deleted when absent). The single source of truth for variant→message sync. */
-function applyVariantToMessage(m: ChatMessage, v: ChatVariant): void {
-  m.content = v.content;
-  if (v.thinking) m.thinking = v.thinking; else delete m.thinking;
-  if (v.usage) m.usage = v.usage; else delete m.usage;
-  if (v.attachments) m.attachments = v.attachments; else delete m.attachments;
-}
-function msgTokens(m: ChatMessage): number {
-  let t = estTokens(m.content) + 4;
-  for (const a of m.attachments ?? []) {
-    // Blobs live in the .attach sidecar, so history messages hold {ref} without `data`. Fall back to
-    // the stored byte size so large attached files aren't budgeted as 0 (which overflowed the window).
-    if (a.kind === 'image') t += 1200;
-    else t += a.data ? estTokens(a.data) : Math.ceil((a.bytes ?? 0) / 4);
-  }
-  return t;
-}
-
-/** Is this an internal tool message (hidden in the UI)? An assistant with toolCalls or a 'tool' result. */
-function isHiddenToolMsg(m: ChatMessage): boolean {
-  return m.role === 'tool' || (m.role === 'assistant' && Array.isArray(m.toolCalls) && m.toolCalls.length > 0);
-}
-
-/** Validates and limits the attachments arriving from the webview. */
-function sanitizeAttachments(input: any): { kind: 'image' | 'text' | 'document'; name: string; mime: string; data: string }[] {
-  if (!Array.isArray(input)) return [];
-  const out: { kind: 'image' | 'text' | 'document'; name: string; mime: string; data: string }[] = [];
-  for (const a of input.slice(0, 10)) {
-    if (!a || (a.kind !== 'image' && a.kind !== 'text' && a.kind !== 'document')) continue;
-    if (typeof a.data !== 'string' || !a.data) continue;
-    out.push({
-      kind: a.kind,
-      name: typeof a.name === 'string' ? a.name : 'attachment',
-      mime: typeof a.mime === 'string' ? a.mime : (a.kind === 'image' ? 'image/png' : 'text/plain'),
-      data: a.data,
-    });
-  }
-  return out;
 }
 
 const TOGGLE_KEYS: (keyof ChatParams)[] = [
@@ -1958,15 +1900,6 @@ function applyPatch(doc: ChatDoc, patch: any): void {
   }
 }
 
-function errMsg(err: any): string {
-  const m = err?.message ?? String(err);
-  if (/fetch failed|ECONNREFUSED|Failed to fetch/i.test(m)) {
-    return 'Could not connect to the backend. Is LM Studio / Ollama running? Check the URL in settings (🔧).';
-  }
-  return m;
-}
-
-
 // Line icons (monochrome, inherit currentColor) for the toolbar and headers.
 const SVG = (inner: string) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -1983,7 +1916,3 @@ const UI = {
   zoomOut: SVG('<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/>'),
 };
 
-function makeNonce(): string {
-  // Cryptographic randomness (not Math.random) for the CSP nonce.
-  return crypto.randomBytes(24).toString('base64').replace(/[^A-Za-z0-9]/g, '');
-}

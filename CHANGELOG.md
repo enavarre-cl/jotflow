@@ -5,6 +5,18 @@ All notable changes to Parley. Format based on
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-06-22
+
+### Internal
+- **God-file slimming (start of §3.2/§3.7).** Two safe, behavior-preserving extractions:
+  - Host: the pure chat/message helpers (`addUsage`, `estTokens`, `msgTokens`, `applyVariantToMessage`,
+    `isHiddenToolMsg`, `sanitizeAttachments`, `errMsg`, `makeNonce`) moved out of `extension.ts` into
+    a VS Code-free `src/chatHelpers.ts` **with unit tests** (48 tests total). `extension.ts` 1989 → 1918.
+  - Webview: the self-contained Markdown renderer moved to `media/markdown.js` (loaded before
+    `main.js`, exposed as `window.PMd`; entry points aliased). `main.js` 2985 → 2840.
+  - Behavior is unchanged; the deeper extractions (`runInference`, the message router, the attachment
+    store, webview find/autocomplete) remain as follow-ups.
+
 ## [1.3.1] - 2026-06-22
 
 ### Internal
