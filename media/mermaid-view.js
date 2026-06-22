@@ -9,8 +9,6 @@
   // ```mermaid block, so webviews without diagrams pay nothing.
   let _mermaidPromise = null;
   let _mermaidSeq = 0;
-  const _mermaidCache = new Map(); // diagram source → rendered SVG (ids tokenized for safe re-mount)
-  const MM_ID_TOKEN = '__MMID_PLACEHOLDER__'; // swapped for a fresh id on each mount
   function ensureMermaid() {
     if (_mermaidPromise) return _mermaidPromise;
     _mermaidPromise = new Promise((resolve) => {
@@ -53,18 +51,8 @@
       const code = (srcEl ? srcEl.textContent : el.textContent) || '';
       if (!mermaid) { el.classList.add('error'); continue; } // load failed → leave the code block
       try {
-        // Cache the rendered SVG by source: history rebuilds (new message, edit, variant switch,
-        // find/replace…) otherwise re-run the expensive mermaid.render() for every diagram every time.
-        // Ids are tokenized so each mount gets fresh ones (no duplicate-id clashes within a render).
-        let svg = _mermaidCache.get(code);
-        if (svg != null) {
-          svg = svg.split(MM_ID_TOKEN).join('mmd-' + (_mermaidSeq++));
-        } else {
-          const id = 'mmd-' + (_mermaidSeq++);
-          const out = await mermaid.render(id, code);
-          _mermaidCache.set(code, out.svg.split(id).join(MM_ID_TOKEN));
-          svg = out.svg;
-        }
+        const id = 'mmd-' + (_mermaidSeq++);
+        const { svg } = await mermaid.render(id, code); // always render fresh
         mountMermaid(el, svg);
       } catch (e) {
         // Keep the source visible and append a discreet error note.

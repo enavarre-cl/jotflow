@@ -992,7 +992,7 @@
       messagesEl.scrollTop = prevTop;
     }
     // If the search bar is open, re-highlight over the freshly rebuilt DOM.
-    if (typeof refreshFind === 'function') refreshFind();
+    if (window.PFind) window.PFind.refresh();
     // Show the reasoning of the last message in the panel.
     showThinking(lastThinking);
   }
