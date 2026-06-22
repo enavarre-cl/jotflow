@@ -122,10 +122,14 @@ import { t } from '../core/i18n.js';
     // to the viewBox and drop the intrinsic width/height so height:auto follows it.
     const svgEl = canvas.querySelector('svg');
     if (svgEl) {
-      if (!svgEl.getAttribute('viewBox')) {
-        const w = parseFloat(svgEl.getAttribute('width') || '') || 0;
-        const h = parseFloat(svgEl.getAttribute('height') || '') || 0;
-        if (w && h) svgEl.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      // Derive the intrinsic w/h from the viewBox (or the width/height attributes as a fallback).
+      let vbW = 0, vbH = 0;
+      const vb = svgEl.getAttribute('viewBox');
+      if (vb) { const p = vb.split(/[\s,]+/).map(Number); vbW = p[2]; vbH = p[3]; }
+      if (!vbW || !vbH) {
+        vbW = parseFloat(svgEl.getAttribute('width') || '') || 0;
+        vbH = parseFloat(svgEl.getAttribute('height') || '') || 0;
+        if (vbW && vbH) svgEl.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);
       }
       svgEl.removeAttribute('width');
       svgEl.removeAttribute('height');
@@ -133,6 +137,9 @@ import { t } from '../core/i18n.js';
       svgEl.style.removeProperty('max-width'); // Mermaid pins a tiny intrinsic max-width inline
       svgEl.style.removeProperty('width');
       svgEl.style.removeProperty('height');
+      // Pin the aspect ratio explicitly so CSS width:100% + height:auto can NEVER squish it
+      // vertically, regardless of how the browser resolves the viewBox.
+      if (vbW && vbH) svgEl.style.aspectRatio = vbW + ' / ' + vbH;
     }
     viewport.appendChild(canvas);
     const pz = makePanZoom(viewport, canvas);

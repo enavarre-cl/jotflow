@@ -143,6 +143,9 @@
   overflow: hidden;
   /* No height cap: at rest the viewport fits the SVG's natural height for the full bubble width
      (proportional, whole diagram readable). Zooming transforms past these bounds → pan to reveal. */
+  /* Floor so a very wide/short diagram still leaves room for the overlay controls (top tools ~38px
+     + bottom zoom pad ~98px). The canvas stays top-left so the pan/zoom transform math is unaffected. */
+  min-height: 150px;
   cursor: grab;
   touch-action: none; /* pointer drag = pan, not page scroll */
 }
