@@ -17,17 +17,17 @@ import {
   serializeDoc,
   defaultDoc,
 } from './chatDocument';
-import { FindOpts, replaceInString } from './findReplace';
 import { renderWebviewHtml } from './webviewHtml';
 import { AttachmentStore } from './attachmentStore';
 import { runInference as runInferenceImpl } from './inference';
-import { addUsage, estTokens, applyVariantToMessage, isHiddenToolMsg, sanitizeAttachments, errMsg } from './chatHelpers';
+import { routeMessage } from './messageRouter';
+import { addUsage, estTokens, applyVariantToMessage, sanitizeAttachments, errMsg } from './chatHelpers';
 import { ToolHub } from './tools';
 import { wavData, concatWavs, splitForTTS } from './audio';
 import { initProxy } from './http';
 import { tr, resolvedLang, activeBundle } from './i18n';
 import { registerCompare } from './compareView';
-import { SpellWordsStore, SpellLang, SPELL_LANGS } from './spellWords';
+import { SpellWordsStore, SPELL_LANGS } from './spellWords';
 import { openDictionaryPanel } from './dictionaryPanel';
 import { openVoicesPanel } from './voicesPanel';
 import { removePiperVoice, listPiperVoices } from './piperVoices';
@@ -308,8 +308,8 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
     // Text we write ourselves: to distinguish our own edits from external ones.
     let lastWritten: string | null = null;
     const abortRef: { current: AbortController | undefined } = { current: undefined };
-    let busy = false; // an inference is in progress: reject new requests
-    let ttsToken = 0; // identifies the current TTS request; when it changes, the chunk loop is cancelled
+    const busyRef = { value: false };
+    const ttsTokenRef = { value: 0 };
     let currentPiperProc: any = null; // piper process in flight, so we can kill it on cancel
     const killPiper = () => { if (currentPiperProc) { try { currentPiperProc.kill(); } catch { /* nothing */ } currentPiperProc = null; } };
     // TTS trace to file (for debugging without relying on the webview console).
@@ -412,8 +412,8 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
     const synthPiper = async (text: string, rate: number, voice: string, reqId: number): Promise<void> => {
       const t = text.trim();
       if (!t) return;
-      const myToken = ++ttsToken; // any later request/stop cancels this one
-      const cancelled = () => myToken !== ttsToken;
+      const myToken = ++ttsTokenRef.value; // any later request/stop cancels this one
+      const cancelled = () => myToken !== ttsTokenRef.value;
       killPiper(); // kill any piper from a previous request still in flight
       tlog(`req#${reqId} received (engine=piper, rate=${rate}, voice=${voice || '(setting)'})`);
       // All TTS messages carry the request id so the webview can filter stale ones.
@@ -954,386 +954,15 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       return pick === yes;
     };
 
-    const onMsg = webview.onDidReceiveMessage(async (msg: any) => {
-      switch (msg?.type) {
-        case 'ready':
-          pushLang();
-          pushDoc();
-          webview.postMessage({ type: 'spellWords', words: await this.spellWords.all() });
-          webview.postMessage({ type: 'piperVoices', ids: this.downloadedVoiceIds() });
-          await loadModels();
-          break;
-        case 'spellAddWord':
-          // Adds to the active spell-checker language list. The store fires onDidChange →
-          // all webviews + the sidebar view are updated.
-          if (typeof msg.word === 'string' && (SPELL_LANGS as string[]).includes(msg.lang)) {
-            await this.spellWords.add(msg.lang as SpellLang, msg.word);
-          }
-          break;
-        case 'summarizeUpTo': {
-          // Summarises context up to message `index` (exclusive), same as the "up to here" fork.
-          if (busy) break;
-          const doc = getDoc();
-          if (!doc) break;
-          if (!doc.params.autoSummary) {
-            webview.postMessage({ type: 'notice', message: tr('Enable "Auto-summarize when context fills up" to use the summary.') });
-            break;
-          }
-          const idx = msg.index;
-          const currentUpTo = doc.summary ? doc.summary.upTo : 0;
-          if (!Number.isInteger(idx) || idx <= currentUpTo || idx > doc.messages.length) {
-            webview.postMessage({ type: 'notice', message: tr('Nothing new to summarize.') });
-            break;
-          }
-          busy = true;
-          try {
-            await ensureSummary(doc, doc.messages, idx);
-            pushDoc();
-          } catch (err: any) {
-            webview.postMessage({ type: 'notice', message: tr('⚠️ Could not summarize context: ') + errMsg(err) });
-          } finally { busy = false; }
-          break;
-        }
-        case 'setSummary': {
-          // Manual editing of the summary text (does not change its `upTo`).
-          if (busy) break;
-          const doc = getDoc();
-          if (!doc || !doc.summary || typeof msg.text !== 'string') break;
-          doc.summary = { text: msg.text, upTo: doc.summary.upTo };
-          await writeDoc(doc);
-          pushDoc();
-          break;
-        }
-        case 'clearSummary': {
-          // Clears the summary: the full history is sent again (recalculated if needed).
-          if (busy) break;
-          const doc = getDoc();
-          if (!doc || !doc.summary) break;
-          doc.summary = undefined;
-          await writeDoc(doc);
-          pushDoc();
-          break;
-        }
-        case 'send':
-          if (busy) break;
-          busy = true;
-          try { await handleSend(msg.text, msg.attachments); } finally { busy = false; }
-          break;
-        case 'stop':
-          abortRef.current?.abort();
-          break;
-        case 'tts':
-          await synthPiper(String(msg.text ?? ''), Number(msg.rate) || 1, String(msg.voice ?? ''), Number(msg.id) || 0);
-          break;
-        case 'ttsStop':
-          tlog('ttsStop (cancel)');
-          ttsToken++; // cancels the current chunk loop
-          killPiper(); // and kills the in-flight piper (avoid wasting CPU)
-          break;
-        case 'ttsLog':
-          tlog('[webview] ' + msg.message + ' ' + (msg.data != null ? JSON.stringify(msg.data) : ''));
-          break;
-        case 'ttsUpdate':
-          try {
-            const voice = String(msg.voice ?? '');
-            const notice = (m: string) => webview.postMessage({ type: 'notice', message: m });
-            const isVoice = !!voice && /^[a-z]{2}_[A-Z]{2}-/.test(voice);
-            if (isVoice) removePiperVoice(vscode.Uri.joinPath(this.context.globalStorageUri, 'piper-voices').fsPath, voice);
-            await this.piper.update(notice);          // updates the engine (pip upgrade)
-            if (isVoice) await this.piper.ensureVoice(voice, notice); // re-downloads the voice
-          } catch (e: any) {
-            webview.postMessage({ type: 'ttsError', message: tr('Could not set up Piper: ') + (e?.message ?? e) });
-          }
-          break;
-        case 'setConfig': {
-          if (busy) break; // do not mutate the doc while an inference is writing
-          const doc = getDoc();
-          if (!doc) break;
-          const before = doc.provider;
-          const toolsBefore = doc.params.tools;
-          applyPatch(doc, msg.patch);
-          await writeDoc(doc);
-          if (doc.provider !== before) await loadModels();
-          // Tools just turned ON in an untrusted workspace: nudge the user to grant Workspace Trust
-          // now (up front) so filesystem tools / MCP servers won't fail mid-turn. `requestWorkspaceTrust`
-          // is a proposed (non-publishable) API, so we surface a notice + open the Trust editor instead.
-          // Only on the off→on edge, so it never nags on unrelated config changes.
-          if (doc.params.tools && !toolsBefore && !vscode.workspace.isTrusted) {
-            const manage = tr('Manage Trust');
-            const pick = await vscode.window.showWarningMessage(
-              tr('Parley tools (workspace files + MCP servers) need a trusted workspace to run.'),
-              manage,
-            );
-            if (pick === manage) await vscode.commands.executeCommand('workbench.trust.manage');
-          }
-          break;
-        }
-        case 'deleteMessage': {
-          if (busy) break;
-          const doc = getDoc();
-          if (!doc) break;
-          const i = msg.index;
-          if (Number.isInteger(i) && i >= 0 && i < doc.messages.length) {
-            if (!(await confirmDelete(msg, tr('Delete this message?')))) break;
-            // Also drags the adjacent HIDDEN tool chain (assistant with toolCalls + 'tool' results)
-            // on BOTH sides: before (complete turn) and after (broken turn without a final response).
-            // Otherwise they would remain orphaned in the JSON.
-            let start = i;
-            let end = i;
-            while (start > 0 && isHiddenToolMsg(doc.messages[start - 1])) start--;
-            while (end + 1 < doc.messages.length && isHiddenToolMsg(doc.messages[end + 1])) end++;
-            doc.messages.splice(start, end - start + 1);
-            // If only tool remnants remain (no displayable message), clear entirely.
-            if (!doc.messages.some((m) => !isHiddenToolMsg(m))) doc.messages = [];
-            doc.summary = undefined; // summary indices changed
-            await writeDoc(doc);
-            sendHistory();
-          }
-          break;
-        }
-        case 'deleteFrom': {
-          // Deletes message `index` and all subsequent ones (⌥/Alt + trash).
-          if (busy) break;
-          const doc = getDoc();
-          if (!doc) break;
-          const i = msg.index;
-          if (Number.isInteger(i) && i >= 0 && i < doc.messages.length) {
-            if (!(await confirmDelete(msg, tr('Delete this message and all below?')))) break;
-            // Includes the hidden tool chain preceding the cut point.
-            let start = i;
-            while (start > 0 && isHiddenToolMsg(doc.messages[start - 1])) start--;
-            doc.messages.splice(start); // removes from start to the end
-            doc.summary = undefined;
-            await writeDoc(doc);
-            sendHistory();
-          }
-          break;
-        }
-        case 'mergeMessage': {
-          // Merges message `index` with the previous one (same role) into a single message.
-          if (busy) break;
-          const doc = getDoc();
-          if (!doc) break;
-          const i = msg.index;
-          if (
-            Number.isInteger(i) && i > 0 && i < doc.messages.length &&
-            doc.messages[i].role === doc.messages[i - 1].role
-          ) {
-            const prev = doc.messages[i - 1];
-            const cur = doc.messages[i];
-            prev.content = `${prev.content}\n\n${cur.content}`.trim();
-            const merged = [prev.thinking, cur.thinking].filter(Boolean).join('\n\n');
-            if (merged) prev.thinking = merged;
-            doc.messages.splice(i, 1);
-            doc.summary = undefined; // summary indices changed
-            await writeDoc(doc);
-            sendHistory();
-          }
-          break;
-        }
-        case 'editMessage': {
-          if (busy) break;
-          const doc = getDoc();
-          if (!doc) break;
-          const i = msg.index;
-          if (Number.isInteger(i) && i >= 0 && i < doc.messages.length && typeof msg.content === 'string') {
-            const m = doc.messages[i];
-            m.content = msg.content;
-            // If the message has variants, edit the active one.
-            if (Array.isArray(m.variants) && typeof m.active === 'number' && m.variants[m.active]) {
-              m.variants[m.active].content = msg.content;
-            }
-            doc.summary = undefined; // content changed: invalidate the summary
-            await writeDoc(doc);
-            sendHistory();
-          }
-          break;
-        }
-        // Find/Replace (webview's replace row). `replaceOne` targets one occurrence (by ordinal
-        // within a message); `replaceAll` rewrites every occurrence across the conversation. Both
-        // operate on the raw message source (case-insensitive, matching the find highlight).
-        case 'replaceOne':
-        case 'replaceAll': {
-          if (busy) break;
-          const doc = getDoc();
-          if (!doc) break;
-          const query = msg.query, replacement = msg.replacement;
-          if (typeof query !== 'string' || query === '' || typeof replacement !== 'string') break;
-          const fopts: FindOpts = (msg.opts && typeof msg.opts === 'object') ? msg.opts : {};
-          const editActive = (m: ChatMessage, nth: number): number => {
-            const hasVar = Array.isArray(m.variants) && typeof m.active === 'number' && m.variants[m.active];
-            const cur = hasVar ? m.variants![m.active!].content : m.content;
-            const r = replaceInString(typeof cur === 'string' ? cur : '', query, replacement, nth, fopts);
-            if (r.count) {
-              m.content = r.content;
-              if (hasVar) m.variants![m.active!].content = r.content;
-            }
-            return r.count;
-          };
-          let total = 0;
-          if (msg.type === 'replaceOne') {
-            const i = msg.index;
-            const nth = Number.isInteger(msg.ordinal) && msg.ordinal >= 1 ? msg.ordinal : 1;
-            if (Number.isInteger(i) && i >= 0 && i < doc.messages.length) total = editActive(doc.messages[i], nth);
-          } else {
-            for (const m of doc.messages) total += editActive(m, 0); // 0 = all occurrences
-          }
-          if (total) { doc.summary = undefined; await writeDoc(doc); sendHistory(); }
-          break;
-        }
-        case 'regenerate':
-          if (busy) break;
-          busy = true;
-          try { await handleRegenerate(); } finally { busy = false; }
-          break;
-        case 'continue':
-          if (busy) break;
-          busy = true;
-          try { await handleContinue(); } finally { busy = false; }
-          break;
-        case 'fork':
-          if (busy) break;
-          if (Number.isInteger(msg.index)) {
-            busy = true;
-            try { await handleFork(msg.index, msg.fromHere === true); } finally { busy = false; }
-          }
-          break;
-        case 'regenerateFrom': {
-          // Regenerates the response to a user message: discards everything after it
-          // (old response, partial tool-calls…) and runs inference again.
-          if (busy) break;
-          const doc = getDoc();
-          if (!doc) break;
-          const i = msg.index;
-          if (!Number.isInteger(i) || i < 0 || i >= doc.messages.length || doc.messages[i].role !== 'user') break;
-          busy = true; // blocks re-entrancy BEFORE mutating/writing
-          try {
-            if (i + 1 < doc.messages.length) {
-              doc.messages.splice(i + 1); // leaves the prompt as the last message
-              doc.summary = undefined;
-              await writeDoc(doc);
-              sendHistory();
-            }
-            await handleGenerate();
-          } finally { busy = false; }
-          break;
-        }
-        case 'setVariant':
-          if (!busy && Number.isInteger(msg.index) && Number.isInteger(msg.variant)) {
-            await setVariant(msg.index, msg.variant);
-          }
-          break;
-        case 'deleteVariant':
-          if (!busy && Number.isInteger(msg.index) && Number.isInteger(msg.variant)) {
-            if (!(await confirmDelete(msg, tr('Delete this variant?')))) break;
-            await deleteVariant(msg.index, msg.variant);
-          }
-          break;
-        case 'refreshModels':
-          await loadModels();
-          break;
-        case 'copy':
-          if (typeof msg.text === 'string') await vscode.env.clipboard.writeText(msg.text);
-          break;
-        case 'atFiles': {
-          // @-mention autocomplete: return workspace files matching the partial query.
-          const files = await searchFiles(typeof msg.q === 'string' ? msg.q : '');
-          webview.postMessage({ type: 'atFilesResult', q: msg.q, reqId: msg.reqId, files });
-          break;
-        }
-        case 'saveImage': {
-          // Saves a generated image of message `index` (the active variant) to disk via a native dialog.
-          const doc = getDoc();
-          const m = doc?.messages[msg.index];
-          if (!m) break;
-          const img = (m.attachments ?? []).map(attachStore.resolve).find((a) => a.kind === 'image' && a.data);
-          if (!img) break;
-          const ext = /jpe?g/i.test(img.mime) ? 'jpg' : /webp/i.test(img.mime) ? 'webp' : /gif/i.test(img.mime) ? 'gif' : 'png';
-          // Default to the workspace folder (fall back to the .chat's folder, then home).
-          const saveDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
-            || path.dirname(document.uri.fsPath)
-            || os.homedir();
-          const target = await vscode.window.showSaveDialog({
-            defaultUri: vscode.Uri.file(path.join(saveDir, img.name || `image.${ext}`)),
-            filters: { [tr('Image')]: [ext] },
-          });
-          if (!target) break;
-          await vscode.workspace.fs.writeFile(target, Buffer.from(img.data, 'base64'));
-          break;
-        }
-        case 'exportHtml': {
-          // Writes a self-contained HTML file and opens it in the browser (which can print it → Save as PDF).
-          const safe = String(msg.title || 'chat').replace(/[^\w\- ]+/g, '_').replace(/\s+/g, '_').slice(0, 40);
-          const file = vscode.Uri.file(path.join(os.tmpdir(), `parley-${safe}-${Date.now()}.html`));
-          await vscode.workspace.fs.writeFile(file, Buffer.from(String(msg.html || ''), 'utf8'));
-          await vscode.env.openExternal(file);
-          // Deletes the temp file after giving the browser time to load it (otherwise they pile up in /tmp).
-          setTimeout(() => { try { fs.unlinkSync(file.fsPath); } catch { /* nothing */ } }, 60000);
-          break;
-        }
-        case 'openSettings':
-          await vscode.commands.executeCommand('workbench.action.openSettings', 'parley');
-          break;
-        case 'createSysPrompt': {
-          // Creates a .md file (with the current inline prompt) next to the .chat, references it and opens it.
-          const doc = getDoc();
-          if (!doc) break;
-          const dir = vscode.Uri.joinPath(document.uri, '..');
-          const stem = path.basename(document.uri.fsPath).replace(/\.chat$/i, '') || 'system';
-          const target = await vscode.window.showSaveDialog({
-            defaultUri: vscode.Uri.joinPath(dir, `${stem}.md`),
-            filters: { 'System prompt': ['md', 'sysprompt', 'txt'] },
-            saveLabel: tr('Create .md'),
-          });
-          if (!target) break;
-          await vscode.workspace.fs.writeFile(target, Buffer.from(doc.systemPrompt || '', 'utf8'));
-          doc.systemPromptFile = path.relative(dir.fsPath, target.fsPath);
-          await writeDoc(doc);
-          pushDoc();
-          await vscode.commands.executeCommand('vscode.open', target);
-          break;
-        }
-        case 'pickSysPrompt': {
-          const doc = getDoc();
-          if (!doc) break;
-          const picked = await vscode.window.showOpenDialog({
-            canSelectMany: false,
-            filters: { 'System prompt': ['md', 'sysprompt', 'txt'] },
-            openLabel: tr('Use as system prompt'),
-          });
-          if (!picked || !picked[0]) break;
-          const dir = vscode.Uri.joinPath(document.uri, '..');
-          doc.systemPromptFile = path.relative(dir.fsPath, picked[0].fsPath);
-          await writeDoc(doc);
-          pushDoc();
-          // Warn at pick time if it lives outside the workspace: it would be ignored at send time.
-          if (!sysPromptPathAllowed(picked[0].fsPath)) {
-            void vscode.window.showWarningMessage(
-              tr('This file is outside the workspace, so it will not be used as the system prompt. Move it inside the project folder.')
-            );
-          }
-          break;
-        }
-        case 'openSysPrompt': {
-          const doc = getDoc();
-          if (!doc || !doc.systemPromptFile) break;
-          // Same allow-list as resolveSystemPrompt (.chat folder + workspace): a manually edited
-          // systemPromptFile cannot open files outside (e.g. ../../etc/passwd).
-          const resolved = path.resolve(path.dirname(document.uri.fsPath), doc.systemPromptFile);
-          if (!sysPromptPathAllowed(resolved)) break;
-          await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(resolved));
-          break;
-        }
-        case 'clearSysPrompt': {
-          const doc = getDoc();
-          if (!doc) break;
-          doc.systemPromptFile = undefined;
-          await writeDoc(doc);
-          pushDoc();
-          break;
-        }
-      }
-    });
+    const onMsg = webview.onDidReceiveMessage((msg: any) => routeMessage(msg, {
+      webview, getDoc, writeDoc, pushDoc, pushLang, sendHistory, loadModels,
+      handleSend, handleGenerate, handleFork, handleContinue, handleRegenerate, setVariant, deleteVariant,
+      ensureSummary, synthPiper, killPiper, resolveSystemPrompt, tlog, applyPatch,
+      abortRef, busyRef, ttsTokenRef,
+      spellWords: this.spellWords, downloadedVoiceIds: () => this.downloadedVoiceIds(), piper: this.piper,
+      globalStorageUri: this.context.globalStorageUri,
+      document, searchFiles, sysPromptPathAllowed, confirmDelete, resolveAttachment: attachStore.resolve,
+    }));
 
     // Syncs external document changes (manual JSON editing) without overwriting the in-progress
     // streaming (which we ourselves triggered).
@@ -1355,13 +984,13 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
         void vscode.workspace.applyEdit(edit);
         return;
       }
-      if (busy) return; // don't reconcile/re-render mid-turn — it would disrupt the streaming bubble
+      if (busyRef.value) return; // don't reconcile/re-render mid-turn — it would disrupt the streaming bubble
       pushDoc();
     });
 
     // The models view can apply a provider+model to the currently focused chat.
     const applyConfig = async (patch: any): Promise<void> => {
-      if (busy) return;
+      if (busyRef.value) return;
       const doc = getDoc();
       if (!doc) return;
       const before = doc.provider;
