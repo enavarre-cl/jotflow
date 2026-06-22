@@ -1,15 +1,5 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import * as cp from 'child_process';
-import { buildProvider, chatDefaults, providerInfo, isProviderId, setApiKeyOverride, setManagedOllamaBaseUrl, ChatMessage, ProviderId } from './providers';
-import { OllamaManager } from './ollama/manager';
-import { DownloadManager } from './ollama/downloads';
-import { ModelCardCache } from './ollama/cards';
-import { ModelsTreeProvider, Section } from './modelsView';
-import { ModelsPanel } from './modelsPanel';
-import { remove as removeModel } from './ollama/registry';
+import { chatDefaults, providerInfo, isProviderId, setApiKeyOverride, ChatMessage, ProviderId } from './providers';
 import {
   ChatDoc,
   ChatParams,
@@ -22,16 +12,19 @@ import { AttachmentStore } from './attachmentStore';
 import { runInference as runInferenceImpl } from './inference';
 import { routeMessage } from './messageRouter';
 import { makeChatOps } from './chatOps';
-import { estTokens, errMsg } from './chatHelpers';
+import { makeTtsBackend } from './ttsBackend';
+import { makeSystemPrompt } from './systemPrompt';
+import { makeLoadModels } from './loadModels';
+import { makeSummary } from './summary';
+import { registerLocalModels } from './localModels';
+import { estTokens } from './chatHelpers';
 import { ToolHub } from './tools';
-import { wavData, concatWavs, splitForTTS } from './audio';
 import { initProxy } from './http';
 import { tr, resolvedLang, activeBundle } from './i18n';
 import { registerCompare } from './compareView';
 import { SpellWordsStore, SPELL_LANGS } from './spellWords';
 import { openDictionaryPanel } from './dictionaryPanel';
-import { openVoicesPanel } from './voicesPanel';
-import { removePiperVoice, listPiperVoices } from './piperVoices';
+import { listPiperVoices } from './piperVoices';
 import { PiperManager } from './piper/manager';
 
 // Tools hub (native filesystem + MCP servers), shared by all chats.
@@ -53,12 +46,6 @@ async function loadApiKeys(context: vscode.ExtensionContext): Promise<void> {
   }
 }
 
-/** Extracts the HF repo id from a local Ollama model name (`hf.co/user/repo:quant` → `user/repo`). */
-function localModelHfId(name?: string): string | undefined {
-  if (!name || !/^hf\.co\//i.test(name)) return undefined;
-  const id = name.replace(/^hf\.co\//i, '').replace(/:[^:/]+$/, '');
-  return id || undefined;
-}
 
 export function activate(context: vscode.ExtensionContext) {
   const spellWords = new SpellWordsStore(context);
@@ -116,142 +103,7 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  // ---- Local models (managed Ollama + explorer) ----
-  const ollama = new OllamaManager(context, (s) => {
-    if (vscode.workspace.getConfiguration('parley').get<boolean>('tts.debug', false)) console.log(s);
-  });
-  // Publishes the managed baseUrl so the Ollama provider can use it when ready.
-  ollama.onDidChangeStatus(() => setManagedOllamaBaseUrl(ollama.status === 'ready' ? ollama.baseUrl() : undefined));
-  const needServer = async (): Promise<string | undefined> => {
-    try {
-      // If ready, returns immediately; otherwise shows progress (first time downloads the binary).
-      if (ollama.status === 'ready') return ollama.baseUrl();
-      return await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Window, title: 'Ollama' },
-        () => ollama.start((received, total) => { void received; void total; })
-      );
-    } catch (e: any) { vscode.window.showErrorMessage(`Ollama: ${e?.message || e}`); return undefined; }
-  };
-  // Persistent downloads (survive restarts) that auto-start the server on (re)attempt.
-  const downloads = new DownloadManager(
-    () => needServer(),
-    (name, modelPaths, projPath) => ollama.create(name, modelPaths, projPath),
-    () => refreshTrees(),
-    context.globalState,
-    path.join(context.globalStorageUri.fsPath, 'imports')
-  );
-  const piperVoicesDir = vscode.Uri.joinPath(context.globalStorageUri, 'piper-voices').fsPath;
-  // One view (TreeProvider) per section → VS Code gives them the native shaded header.
-  const mkTree = (s: Section) => new ModelsTreeProvider(ollama, downloads, spellWords, piperVoicesDir, piper, s, voicesChanged.event);
-  const treeEngines = mkTree('engines');
-  const treeModels = mkTree('models'); // includes Local models + Downloads (tree)
-  const treeVoices = mkTree('voices');
-  const treeDict = mkTree('dictionary');
-  const refreshTrees = (): void => { treeEngines.refresh(); treeModels.refresh(); treeVoices.refresh(); treeDict.refresh(); };
-  // Card cache (sidecar): view/queue saves HF info; cancel/remove clears it.
-  const cards = new ModelCardCache(path.join(context.globalStorageUri.fsPath, 'model-cards'));
-  const panelHooks = {
-    onChanged: () => refreshTrees(),
-    useModel: async (name: string) => {
-      if (ChatEditorProvider.activeApply) { await ChatEditorProvider.activeApply({ provider: 'ollama', model: name }); return true; }
-      return false;
-    },
-  };
-
-  // Installs/updates an engine showing progress. (Ollama "update" = reinstalls the pinned version.)
-  const runEngineTask = async (which: any): Promise<void> => {
-    if (which !== 'ollama' && which !== 'piper') return;
-    const name = which === 'ollama' ? 'Ollama' : 'Piper';
-    const title = tr('Installing engine…') + ` (${name})`;
-    try {
-      await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title }, async (p) => {
-        const notify = (m: string) => p.report({ message: m });
-        if (which === 'ollama') await ollama.ensureBinary();
-        else await piper.install(notify);
-      });
-    } catch (e: any) {
-      vscode.window.showErrorMessage(`${name}: ${e?.message ?? e}`);
-    }
-    refreshTrees();
-  };
-
-  context.subscriptions.push(
-    ollama,
-    downloads,
-    piper, // dispose() shuts down the HTTP daemon when the extension deactivates
-    vscode.window.registerTreeDataProvider('parley.engines', treeEngines),
-    vscode.window.registerTreeDataProvider('parley.models', treeModels),
-    vscode.window.registerTreeDataProvider('parley.voices', treeVoices),
-    vscode.window.registerTreeDataProvider('parley.dictionary', treeDict),
-    vscode.commands.registerCommand('parley.models.add', () => ModelsPanel.show(context, ollama, downloads, cards, panelHooks)),
-    vscode.commands.registerCommand('parley.models.openModelFromDownload', (item: any) => {
-      const modelId = item?.download?.modelId;
-      if (!modelId) return;
-      ModelsPanel.show(context, ollama, downloads, cards, panelHooks);
-      ModelsPanel.revealModel(modelId);
-    }),
-    vscode.commands.registerCommand('parley.models.cancelDownload', (item: any) => {
-      if (item?.download) { cards.remove(item.download.modelId); downloads.cancel(item.download.id); }
-    }),
-    vscode.commands.registerCommand('parley.models.retryDownload', (item: any) => {
-      if (item?.download?.id) downloads.retry(item.download.id);
-    }),
-    vscode.commands.registerCommand('parley.models.removeDownload', (item: any) => {
-      if (item?.download) { cards.remove(item.download.modelId); downloads.remove(item.download.id); }
-    }),
-    vscode.commands.registerCommand('parley.models.clearDownloads', () => downloads.clearFinished()),
-    vscode.commands.registerCommand('parley.models.refresh', () => refreshTrees()),
-    vscode.commands.registerCommand('parley.tts.openVoices', () => {
-      openVoicesPanel(context, piper, piperVoicesDir, () => { refreshTrees(); voicesChanged.fire(); });
-    }),
-    vscode.commands.registerCommand('parley.tts.startServer', async () => {
-      const model = piper.firstVoiceModel();
-      if (!model) { vscode.window.showInformationMessage(tr('Download a voice first from the Voices section.')); return; }
-      try {
-        await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: tr('Starting the Piper server…') },
-          (p) => piper.ensureServer(model, (m) => p.report({ message: m }))
-        );
-      } catch (e: any) { vscode.window.showErrorMessage(`Piper: ${e?.message ?? e}`); }
-    }),
-    vscode.commands.registerCommand('parley.tts.stopServer', () => piper.stopServer()),
-    vscode.commands.registerCommand('parley.tts.removeVoice', async (item: any) => {
-      const id = item?.word; // the voice node carries its id in `word`
-      if (typeof id !== 'string') return;
-      const yes = tr('Delete');
-      const pick = await vscode.window.showWarningMessage(tr('Delete this voice?') + ` (${id})`, { modal: true }, yes);
-      if (pick !== yes) return;
-      removePiperVoice(piperVoicesDir, id);
-      refreshTrees();
-      voicesChanged.fire();
-    }),
-    vscode.commands.registerCommand('parley.engine.install', (item: any) => runEngineTask(item?.word)),
-    vscode.commands.registerCommand('parley.engine.delete', async (item: any) => {
-      const which = item?.word;
-      if (which !== 'ollama' && which !== 'piper') return;
-      const name = which === 'ollama' ? 'Ollama' : 'Piper';
-      const yes = tr('Delete');
-      if (await vscode.window.showWarningMessage(tr('Delete this engine?') + ` (${name})`, { modal: true }, yes) !== yes) return;
-      if (which === 'ollama') { ollama.deleteBinary(); cards.clear(); } else { piper.delete(); voicesChanged.fire(); }
-      refreshTrees();
-    }),
-    vscode.commands.registerCommand('parley.models.startServer', async () => { await needServer(); }),
-    vscode.commands.registerCommand('parley.models.stopServer', () => { ollama.stop(); }),
-    vscode.commands.registerCommand('parley.models.deleteModel', async (item: any) => {
-      const name = item?.model?.name; const baseUrl = ollama.baseUrl();
-      if (!name || !baseUrl) return;
-      const ok = await vscode.window.showWarningMessage(`${tr('Delete the model')} ${name}?`, { modal: true }, tr('Delete'));
-      if (ok !== tr('Delete')) return;
-      try { await removeModel(baseUrl, name); refreshTrees(); }
-      catch (e: any) { vscode.window.showErrorMessage(`${tr('Could not delete: ')}${e?.message || e}`); }
-    }),
-    vscode.commands.registerCommand('parley.models.openLocalModel', (item: any) => {
-      const id = localModelHfId(item?.model?.name);
-      if (!id) { vscode.window.showInformationMessage(tr('This model is not from Hugging Face.')); return; }
-      ModelsPanel.show(context, ollama, downloads, cards, panelHooks);
-      ModelsPanel.revealModel(id);
-    })
-  );
+  registerLocalModels(context, { piper, spellWords, voicesChanged, getActiveApply: () => ChatEditorProvider.activeApply });
 }
 
 export function deactivate() {
@@ -311,16 +163,8 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
     const abortRef: { current: AbortController | undefined } = { current: undefined };
     const busyRef = { value: false };
     const ttsTokenRef = { value: 0 };
-    let currentPiperProc: any = null; // piper process in flight, so we can kill it on cancel
-    const killPiper = () => { if (currentPiperProc) { try { currentPiperProc.kill(); } catch { /* nothing */ } currentPiperProc = null; } };
-    // TTS trace to file (for debugging without relying on the webview console).
-    const tlog = (s: string) => {
-      // Only traces if the user enables debug (off by default).
-      if (!vscode.workspace.getConfiguration('parley').get<boolean>('tts.debug', false)) return;
-      try { console.log('[TTS]', s); } catch { /* nothing */ }
-      try { fs.appendFileSync(path.join(os.tmpdir(), 'parley-tts.log'), new Date().toISOString() + ' ' + s + '\n'); } catch { /* nothing */ }
-    };
-    let modelContexts: Record<string, number> = {}; // model id -> context tokens
+    const { synthPiper, killPiper, tlog } = makeTtsBackend({ webview, piper: this.piper, ttsTokenRef });
+    const modelContextsRef = { value: {} as Record<string, number> };
     // Cache of document parsing by version: parseDoc validates/normalises on every call and
     // getDoc is invoked many times per operation. We return a clone to avoid corrupting the cache.
     let docCache: { version: number; doc: ChatDoc } | null = null;
@@ -410,172 +254,11 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
     // Neural TTS with Piper: splits the text into sentences and sends each chunk as base64 WAV.
     // This way the first fragment plays immediately and no giant WAVs are generated for long messages.
     // `voice` is a curated voice id (downloaded automatically); if empty, uses the path from settings.
-    const synthPiper = async (text: string, rate: number, voice: string, reqId: number): Promise<void> => {
-      const t = text.trim();
-      if (!t) return;
-      const myToken = ++ttsTokenRef.value; // any later request/stop cancels this one
-      const cancelled = () => myToken !== ttsTokenRef.value;
-      killPiper(); // kill any piper from a previous request still in flight
-      tlog(`req#${reqId} received (engine=piper, rate=${rate}, voice=${voice || '(setting)'})`);
-      // All TTS messages carry the request id so the webview can filter stale ones.
-      const post = (m: any) => webview.postMessage({ ...m, id: reqId });
-      const notice = (m: string) => webview.postMessage({ type: 'notice', message: m });
-      const cfg = vscode.workspace.getConfiguration('parley');
-      const speaker = cfg.get<number>('tts.piperSpeaker', -1);
-      const isCurated = !!voice && /^[a-z]{2}_[A-Z]{2}-/.test(voice);
-      // Via DAEMON (resident model, fast): curated voices only. Any failure falls through to
-      // the per-chunk spawn below, so there is no regression if the server fails to start.
-      if (isCurated) {
-        try {
-          const modelPath = await this.piper.ensureVoice(voice, notice);
-          if (cancelled()) return;
-          const baseUrl = await this.piper.ensureServer(modelPath, notice);
-          if (cancelled()) return;
-          const lscale = rate > 0 ? 1 / rate : 1;
-          const wav = await this.piper.synthViaServer(baseUrl, t, voice, lscale, typeof speaker === 'number' ? speaker : -1);
-          if (cancelled()) return;
-          tlog(`req#${reqId} OK via daemon: WAV ${wav.length} bytes`);
-          post({ type: 'ttsAudio', data: wav.toString('base64'), last: true });
-          post({ type: 'ttsDone' });
-          return;
-        } catch (e: any) {
-          tlog(`req#${reqId} daemon failed (${e?.message ?? e}); falling back to per-chunk spawn`);
-        }
-      }
-      let bin: string;
-      try {
-        bin = await this.piper.resolveBin(cfg, notice);
-      } catch (e: any) {
-        post({ type: 'ttsError', message: tr('Could not set up Piper: ') + (e?.message ?? e) });
-        return;
-      }
-      if (cancelled()) return;
-      let model = '';
-      if (voice && /^[a-z]{2}_[A-Z]{2}-/.test(voice)) {
-        try {
-          model = await this.piper.ensureVoice(voice, notice);
-        } catch (e: any) {
-          post({ type: 'ttsError', message: tr('Could not download voice: ') + (e?.message ?? e) });
-          return;
-        }
-      } else {
-        model = cfg.get<string>('tts.piperModel', '') || '';
-      }
-      if (!model) {
-        post({ type: 'ttsError', message: tr('No voice available. Download one from the Parley panel (Voices ➕), or set a custom .onnx path in Settings (parley.tts.piperModel).') });
-        return;
-      }
-      if (cancelled()) return;
-
-      const lengthScale = rate > 0 ? (1 / rate).toFixed(3) : '1';
-      const libDir = path.dirname(bin);
-      const env: any = { ...process.env };
-      if (process.platform === 'darwin') {
-        env.DYLD_LIBRARY_PATH = libDir + (env.DYLD_LIBRARY_PATH ? ':' + env.DYLD_LIBRARY_PATH : '');
-      } else if (process.platform === 'linux') {
-        env.LD_LIBRARY_PATH = libDir + (env.LD_LIBRARY_PATH ? ':' + env.LD_LIBRARY_PATH : '');
-      }
-
-      // Synthesises a chunk and returns the WAV Buffer (or an error).
-      const synthChunk = (chunk: string): Promise<{ ok: boolean; buf?: Buffer; err?: string }> =>
-        new Promise((resolve) => {
-          const out = path.join(os.tmpdir(), `parley-tts-${Date.now()}-${Math.floor(Math.random() * 1e6)}.wav`);
-          const args = ['--model', model, '--output_file', out, '--length_scale', lengthScale];
-          if (typeof speaker === 'number' && speaker >= 0) args.push('--speaker', String(speaker));
-          let proc: any;
-          try {
-            proc = cp.spawn(bin, args, { cwd: libDir, env });
-          } catch (e: any) {
-            return resolve({ ok: false, err: e?.message ?? String(e) });
-          }
-          currentPiperProc = proc; // so we can kill it if cancelled
-          let stderr = '';
-          proc.stderr?.on('data', (d: any) => { stderr += d.toString(); });
-          proc.on('error', (e: any) => {
-            if (currentPiperProc === proc) currentPiperProc = null;
-            try { fs.unlinkSync(out); } catch { /* not created / already deleted */ }
-            resolve({ ok: false, err: e?.message ?? String(e) });
-          });
-          proc.on('close', (code: number) => {
-            if (currentPiperProc === proc) currentPiperProc = null;
-            try {
-              if (code === 0 && fs.existsSync(out)) resolve({ ok: true, buf: fs.readFileSync(out) });
-              else resolve({ ok: false, err: stderr.trim() || `exit ${code}` });
-            } finally {
-              try { fs.unlinkSync(out); } catch { /* already deleted */ }
-            }
-          });
-          proc.stdin?.write(chunk);
-          proc.stdin?.end();
-        });
-
-      // Synthesises each sentence separately (fast) and concatenates them into a single WAV.
-      const chunks = splitForTTS(t);
-      tlog(`req#${reqId} bin=${bin.split('/').slice(-3).join('/')} chars=${t.length} chunks=${chunks.length}`);
-      if (chunks.length > 1) webview.postMessage({ type: 'notice', message: tr('Generating audio…') });
-      const bufs: Buffer[] = [];
-      let lastErr = '';
-      for (let i = 0; i < chunks.length; i++) {
-        if (cancelled()) { tlog(`req#${reqId} cancelled at chunk ${i}`); return; }
-        const r = await synthChunk(chunks[i]);
-        if (cancelled()) { tlog(`req#${reqId} cancelled after chunk ${i}`); return; }
-        if (r.ok && r.buf) bufs.push(r.buf);
-        else { lastErr = r.err || ''; tlog(`req#${reqId} chunk ${i} FAILED: ${lastErr}`); }
-      }
-      if (cancelled()) return;
-      if (!bufs.length) { tlog(`req#${reqId} no audio: ${lastErr}`); post({ type: 'ttsError', message: tr('Piper failed: ') + lastErr }); return; }
-      const wav = concatWavs(bufs);
-      tlog(`req#${reqId} OK: ${bufs.length} chunks → WAV ${wav.length} bytes (~${(wavData(wav).len / (22050 * 2)).toFixed(1)}s); sending`);
-      // A single WAV → a single playback in the webview (no fragile chains).
-      post({ type: 'ttsAudio', data: wav.toString('base64'), last: true });
-      post({ type: 'ttsDone' });
-    };
 
     // Roots a systemPromptFile may live in: the .chat's own folder + any workspace folder. Project
     // files are fine; a shared .chat still cannot pull arbitrary files (e.g. ../../etc/passwd) into
     // the prompt and exfiltrate them to the model.
-    const sysPromptRoots = (): string[] => [
-      path.dirname(document.uri.fsPath),
-      ...(vscode.workspace.workspaceFolders || []).map((f) => f.uri.fsPath),
-    ];
-    const sysPromptPathAllowed = (resolved: string): boolean =>
-      sysPromptRoots().some((root) => resolved === root || resolved.startsWith(root + path.sep));
-
-    let sysPromptWarned = ''; // debounce: warn once per broken file, not on every send
-
-    // Reads the EFFECTIVE system prompt (file if usable, else inline). No side effects.
-    // `fileFailed` = a systemPromptFile was set but is missing/empty/outside the workspace.
-    const readSystemPrompt = (doc: ChatDoc): { text: string; fileFailed: boolean } => {
-      if (doc.systemPromptFile) {
-        const resolved = path.resolve(path.dirname(document.uri.fsPath), doc.systemPromptFile);
-        if (sysPromptPathAllowed(resolved)) {
-          try {
-            const text = fs.readFileSync(resolved, 'utf8');
-            if (text.trim()) return { text, fileFailed: false };
-          } catch { /* missing/unreadable */ }
-        }
-        return { text: doc.systemPrompt || '', fileFailed: true };
-      }
-      return { text: doc.systemPrompt || '', fileFailed: false };
-    };
-
-    // Effective system prompt for sending; warns once (visibly) if a referenced file couldn't be
-    // used, instead of silently using the inline prompt (which looks like the prompt is ignored).
-    const resolveSystemPrompt = (doc: ChatDoc): string => {
-      const { text, fileFailed } = readSystemPrompt(doc);
-      if (fileFailed) {
-        const file = doc.systemPromptFile || '';
-        if (sysPromptWarned !== file) {
-          sysPromptWarned = file;
-          void vscode.window.showWarningMessage(
-            `${tr('System prompt file not used (missing, empty, or outside the workspace); using the inline prompt instead:')} ${file}`
-          );
-        }
-      } else {
-        sysPromptWarned = '';
-      }
-      return text;
-    };
+    const { resolveSystemPrompt, readSystemPrompt, sysPromptPathAllowed } = makeSystemPrompt(document);
 
     // ---- Attachment sidecar (.attach): blobs live here, the .chat only holds references ----
     const attachStore = new AttachmentStore(document.uri);
@@ -597,128 +280,16 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       webview.postMessage({ type: 'status', info: providerInfo(doc.provider), state, detail });
     };
 
-    const loadModels = async (): Promise<void> => {
-      const doc = getDoc();
-      if (!doc) return;
-      const info = providerInfo(doc.provider);
-      sendStatus('checking');
+    const loadModels = makeLoadModels({ webview, getDoc, writeDoc, sendStatus, modelContextsRef });
 
-      if (info.needsKey && !info.hasKey) {
-        webview.postMessage({
-          type: 'models',
-          provider: doc.provider,
-          models: [],
-          current: '',
-          error: `${tr('Missing the API key for')} ${info.label}. ${tr('Set it in the settings (🔧).')}`,
-        });
-        sendStatus('error', tr('missing API key'));
-        return;
-      }
+    const { ensureSummary } = makeSummary({ webview, writeDoc, abortRef });
 
-      try {
-        let models = await buildProvider(doc.provider).listModels();
-        // Global OpenRouter vendor filter (prefix before '/').
-        if (doc.provider === 'openrouter') {
-          const cfg = vscode.workspace.getConfiguration('parley');
-          const vendors = cfg.get<string[]>('openrouter.vendors', []);
-          if (vendors.length) {
-            models = models.filter((m) => vendors.includes(m.id.split('/')[0]));
-          }
-          // Custom model ids the API doesn't list (new/preview). Always included, before the vendor list.
-          const custom = cfg.get<string[]>('openrouter.customModels', []).map((s) => (s || '').trim()).filter(Boolean);
-          const present = new Set(models.map((m) => m.id));
-          for (const id of [...custom].reverse()) {
-            if (!present.has(id)) { models.unshift({ id }); present.add(id); }
-          }
-        }
-        modelContexts = {};
-        for (const m of models) if (m.contextLength) modelContexts[m.id] = m.contextLength;
-        const ids = models.map((m) => m.id);
-        let current = doc.model;
-        if ((!current || !ids.includes(current)) && ids.length > 0) {
-          current = ids[0];
-          doc.model = current;
-          await writeDoc(doc);
-        }
-        webview.postMessage({ type: 'models', provider: doc.provider, models, current });
-        sendStatus('ok', `${models.length} ${tr(models.length === 1 ? 'model' : 'models')}`);
-      } catch (err: any) {
-        webview.postMessage({ type: 'models', provider: doc.provider, models: [], current: '', error: errMsg(err) });
-        sendStatus('error', tr('no connection'));
-      }
-    };
-
-    // Calls the model to summarise a block of messages (no streaming to the UI).
-    const summarizeMessages = async (
-      doc: ChatDoc,
-      prevText: string,
-      msgs: ChatMessage[]
-    ): Promise<string> => {
-      const convo = msgs
-        .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
-        .join('\n\n');
-      const instruction =
-        (prevText
-          ? `Previous summary of the conversation:\n${prevText}\n\nIntegrate the following new messages into a single updated summary.`
-          : 'Summarize the following conversation.') +
-        '\nKeep facts, decisions, data, names and pending tasks. Be concise. Reply with only the summary, in the same language as the conversation.\n\n--- Conversation ---\n' +
-        convo;
-      const wire: ChatMessage[] = [
-        { role: 'system', content: 'You are an assistant that summarizes conversations to preserve context.' },
-        { role: 'user', content: instruction },
-      ];
-      abortRef.current = new AbortController();
-      let text = '';
-      let reasoning = '';
-      try {
-        await buildProvider(doc.provider).chat(
-          doc.model,
-          wire,
-          { temperature: 0.3, maxTokens: 1024 },
-          {
-            signal: abortRef.current!.signal,
-            onDelta: (d) => { text += d; },
-            onReasoning: (d) => { reasoning += d; },
-          }
-        );
-      } finally {
-        abortRef.current = undefined;
-      }
-      // Some reasoning models return text only in the thinking channel.
-      return (text.trim() || reasoning.trim());
-    };
-
-    // Ensures a summary covering messages[0..targetUpTo); extends it incrementally.
-    const ensureSummary = async (
-      doc: ChatDoc,
-      history: ChatMessage[],
-      targetUpTo: number
-    ): Promise<string> => {
-      const prev = doc.summary;
-      if (prev && prev.upTo >= targetUpTo) return prev.text;
-      const startFrom = prev ? prev.upTo : 0;
-      const block = history.slice(startFrom, targetUpTo);
-      if (!block.length) return prev?.text ?? '';
-      // PERSISTENT indicator (with spinner) throughout the model call; removed on completion
-      // or failure. (Previously it was a notice that auto-closed after 6 s, leaving a feedback gap.)
-      webview.postMessage({ type: 'summarizing', active: true, message: tr('🗜️ Summarizing previous context…') });
-      try {
-        const text = await summarizeMessages(doc, prev?.text ?? '', block);
-        if (text) {
-          doc.summary = { text, upTo: targetUpTo };
-          await writeDoc(doc);
-        }
-        return doc.summary?.text ?? '';
-      } finally {
-        webview.postMessage({ type: 'summarizing', active: false });
-      }
-    };
 
     // Runs a streaming inference over `context`. Returns the accumulated result.
     // With `allowTools`, runs the agentic loop (MCP tools / native filesystem).
     const runInference = (doc: ChatDoc, context: ChatMessage[], allowTools = false) =>
       runInferenceImpl(doc, context, allowTools, {
-        webview, toolHub, modelContexts, resolveSystemPrompt, ensureSummary,
+        webview, toolHub, modelContexts: modelContextsRef.value, resolveSystemPrompt, ensureSummary,
         resolveAttachment: attachStore.resolve, getDoc, writeDoc, sendHistory, abortRef,
       });
 
