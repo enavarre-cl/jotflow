@@ -1691,6 +1691,9 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link href="${uri('style.css')}" rel="stylesheet" />
+  <link href="${uri('find.css')}" rel="stylesheet" />
+  <link href="${uri('messages.css')}" rel="stylesheet" />
+  <link href="${uri('composer.css')}" rel="stylesheet" />
   <title>Parley</title>
 </head>
 <body>
