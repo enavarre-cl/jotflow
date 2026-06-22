@@ -9,6 +9,8 @@ import { ChatDoc } from './chatDocument';
  */
 export class AttachmentStore {
   private cache: Record<string, any> | null = null;
+  private cacheMtime = -1;                 // mtimeMs the cache was loaded from; -1 = unknown/none
+  private tmpSeq = 0;                       // makes each temp file name unique within this process
   private loadFailed = false;             // sidecar exists but couldn't be parsed → never clobber it
   private writeChain: Promise<void> = Promise.resolve(); // serialize sidecar writes
 
@@ -20,21 +22,29 @@ export class AttachmentStore {
   }
 
   load(): Record<string, any> {
-    if (this.cache) return this.cache;
+    const p = this.uri().fsPath;
+    let mtime = -1;
+    try { mtime = fs.statSync(p).mtimeMs; } catch { mtime = -1; }
+    // Serve the cache only while the file on disk hasn't changed since we read it. Another window
+    // editing the same .chat rewrites the sidecar; without this we'd keep serving stale blobs.
+    if (this.cache && mtime === this.cacheMtime) return this.cache;
     let raw: string;
     try {
-      raw = fs.readFileSync(this.uri().fsPath, 'utf8');
+      raw = fs.readFileSync(p, 'utf8');
     } catch (e: any) {
       this.cache = {};
+      this.cacheMtime = mtime;
       this.loadFailed = e?.code !== 'ENOENT'; // ENOENT = no sidecar yet (safe to create fresh)
       return this.cache;
     }
     try {
       this.cache = JSON.parse(raw);
+      this.loadFailed = false;
     } catch {
       this.cache = {};
       this.loadFailed = true; // existing-but-corrupt (e.g. a half-written read): don't overwrite it
     }
+    this.cacheMtime = mtime;
     return this.cache!;
   }
 
@@ -43,9 +53,13 @@ export class AttachmentStore {
   private writeSidecar(store: Record<string, any>): Promise<void> {
     const run = this.writeChain.then(async () => {
       const main = this.uri();
-      const tmp = main.with({ path: main.path + '.tmp' });
+      // Per-process unique temp name: a fixed `.tmp` would collide if the same .chat is open in two
+      // windows, with one rename clobbering the other's half-written file.
+      const tmp = main.with({ path: `${main.path}.${process.pid}.${this.tmpSeq++}.tmp` });
       await vscode.workspace.fs.writeFile(tmp, Buffer.from(JSON.stringify(store) + '\n', 'utf8'));
       await vscode.workspace.fs.rename(tmp, main, { overwrite: true });
+      // Adopt the mtime we just wrote so load() doesn't needlessly re-read our own write.
+      try { this.cacheMtime = fs.statSync(main.fsPath).mtimeMs; } catch { /* stat may fail; load() re-reads */ }
     });
     this.writeChain = run.catch(() => {}); // keep the chain alive even if one write fails
     return run;
