@@ -5,6 +5,14 @@ All notable changes to Parley. Format based on
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-06-22
+
+### Internal
+- **Provider HTTP shell deduplicated.** The identical "POST stream → check `res.ok`/body → throw a
+  formatted error → return the reader" block in all four providers (OpenAI, Anthropic, Gemini,
+  Ollama) is now a single `postStream()` helper (`src/providers/request.ts`). Ollama keeps its crash
+  hint via an optional `hint` callback; per-provider message mapping is unchanged.
+
 ## [1.3.0] - 2026-06-22
 
 ### Performance

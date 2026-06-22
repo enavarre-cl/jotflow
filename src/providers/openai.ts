@@ -1,6 +1,6 @@
 import { ChatMessage, ChatResult, GenImage, GenerationParams, LLMProvider, ModelInfo, StreamCallbacks } from './types';
 import { createThinkSplitter } from './think';
-import { formatHttpError } from './httpError';
+import { postStream } from './request';
 import { httpFetch } from '../http';
 import { readLines, safeToolArgs } from './stream';
 import { imageAttachments, documentAttachments, dataUrl, isImageOutputModel, parseDataUrl } from './multimodal';
@@ -138,19 +138,12 @@ export class OpenAIProvider implements LLMProvider {
     // OpenRouter: routing preference across providers (speed/price).
     if (this.openrouter && this.routeSort) body.provider = { sort: this.routeSort };
 
-    const res = await httpFetch(this.url('/chat/completions'), {
+    const reader = await postStream(this.url('/chat/completions'), {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify(body),
       signal: cb.signal,
-    });
-
-    if (!res.ok || !res.body) {
-      const detail = await res.text().catch(() => '');
-      throw new Error(formatHttpError('Backend', res.status, res.statusText, detail));
-    }
-
-    const reader = res.body.getReader();
+    }, 'Backend');
     let answer = '';
     let thinking = '';
     const toolAcc: Record<number, { id: string; name: string; arguments: string }> = {};

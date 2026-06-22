@@ -1,5 +1,5 @@
 import { ChatMessage, ChatResult, GenImage, GenerationParams, LLMProvider, ModelInfo, StreamCallbacks } from './types';
-import { formatHttpError } from './httpError';
+import { postStream } from './request';
 import { httpFetch } from '../http';
 import { readLines } from './stream';
 import { imageAttachments, documentAttachments, isImageOutputModel } from './multimodal';
@@ -127,19 +127,12 @@ export class GeminiProvider implements LLMProvider {
     }
 
     const url = `${this.base()}/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
-    const res = await httpFetch(url, {
+    const reader = await postStream(url, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify(body),
       signal: cb.signal,
-    });
-
-    if (!res.ok || !res.body) {
-      const detail = await res.text().catch(() => '');
-      throw new Error(formatHttpError('Gemini', res.status, res.statusText, detail));
-    }
-
-    const reader = res.body.getReader();
+    }, 'Gemini');
     let answer = '';
     let thinking = '';
     let usage: any;

@@ -1,6 +1,6 @@
 import { ChatMessage, ChatResult, GenerationParams, LLMProvider, ModelInfo, StreamCallbacks } from './types';
 import { createThinkSplitter } from './think';
-import { formatHttpError } from './httpError';
+import { postStream } from './request';
 import { httpFetch } from '../http';
 import { readLines, safeToolArgs } from './stream';
 import { imageAttachments } from './multimodal';
@@ -97,19 +97,12 @@ export class OllamaProvider implements LLMProvider {
       }));
     }
 
-    const res = await httpFetch(this.url('/api/chat'), {
+    const reader = await postStream(this.url('/api/chat'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(reqBody),
       signal: cb.signal,
-    });
-
-    if (!res.ok || !res.body) {
-      const detail = await res.text().catch(() => '');
-      throw new Error(formatHttpError('Ollama', res.status, res.statusText, detail) + llamaCrashHint(detail));
-    }
-
-    const reader = res.body.getReader();
+    }, 'Ollama', llamaCrashHint);
     let answer = '';
     let thinking = '';
     const toolCalls: { id: string; name: string; arguments: string }[] = [];

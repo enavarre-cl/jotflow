@@ -1,5 +1,6 @@
 import { ChatMessage, ChatResult, GenerationParams, LLMProvider, ModelInfo, StreamCallbacks } from './types';
 import { formatHttpError } from './httpError';
+import { postStream } from './request';
 import { httpFetch } from '../http';
 import { readLines, safeToolArgs } from './stream';
 import { imageAttachments, documentAttachments } from './multimodal';
@@ -117,19 +118,12 @@ export class AnthropicProvider implements LLMProvider {
       if (p.topK !== undefined) body.top_k = p.topK;
     }
 
-    const res = await httpFetch(`${this.base()}/messages`, {
+    const reader = await postStream(`${this.base()}/messages`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify(body),
       signal: cb.signal,
-    });
-
-    if (!res.ok || !res.body) {
-      const detail = await res.text().catch(() => '');
-      throw new Error(formatHttpError('Anthropic', res.status, res.statusText, detail));
-    }
-
-    const reader = res.body.getReader();
+    }, 'Anthropic');
     let answer = '';
     let thinking = '';
     let inTok = 0;
