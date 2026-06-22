@@ -5,6 +5,104 @@ All notable changes to Parley. Format based on
 
 ## [Unreleased]
 
+## [1.5.5] - 2026-06-22
+
+### Fixed
+- **Mermaid scales proportionally to the bubble width.** The mounted SVG was stretched
+  horizontally (squished vertically): now its intrinsic size is taken from the `viewBox` (or the
+  `width`/`height` attributes), the conflicting `width`/`height` attributes + inline styles are
+  dropped, `preserveAspectRatio="xMidYMid meet"` and an explicit `style.aspectRatio` are pinned,
+  so CSS `width:100%` + `height:auto` can never distort it. Added `min-height:150px` to the
+  viewport so a very wide/short diagram still leaves room for the overlay controls (zoom pad).
+
+## [1.5.4] - 2026-06-22
+
+### Fixed
+- **Replace advances to the next match again.** `renderConversation` still called the removed
+  `window.PFind.refresh()` bridge (undefined now that find is an ES module), so after a replace
+  the matches were never re-highlighted and Replace stuck on the same hit. Calls the imported
+  `refreshFind()` instead.
+
+## [1.5.3] - 2026-06-22
+
+### Fixed
+- **Find & Replace no longer destroys the context summary.** The replace handler wiped
+  `doc.summary` on any change; a content replacement leaves the summary's coverage valid, so the
+  summary is kept. Replace All now also rewrites the summary text for consistency with the bubble.
+
+## [1.5.2] - 2026-06-22
+
+### Fixed
+- **Restored variant switching / deletion.** The `messageRouter` extraction's `ctx.`-prefixing
+  pass also rewrote the matching case-label strings, so `case 'setVariant'` / `'deleteVariant'`
+  became `'ctx.…'` and never matched the webview messages. Verified every webview message type
+  maps to a router case.
+
+## [1.5.1] - 2026-06-22
+
+### Fixed
+- First pass at the Mermaid vertical-squish: normalize the SVG `viewBox`/attributes so
+  `width:100%` + `height:auto` stay proportional (completed in 1.5.5 with an explicit
+  `aspect-ratio` and a control-height floor).
+
+## [1.5.0] - 2026-06-22
+
+### Internal
+- **Webview modularized into ES modules — no file > 500 lines.** The 2373-line `media/main.js`
+  IIFE (and the `markdown`/`mermaid`/`find` `window.P*` bridges) were split into 19 cohesive
+  modules with explicit `import`/`export`, loaded via a single `<script type="module">` entry
+  (`app/main.js`): `core/` (vscode, icons, i18n, dom) · `render/` (markdown, mermaid) · `ui/`
+  (store, notifications) · `features/` (tts, find, autocomplete, spell) · `chat/` (message,
+  conversation, composer) · `panels/` (config, models) · `app/` (protocol, main). State has
+  single owners (`store`=doc, `conversation`=streaming/tools, `composer`=send-state); the protocol
+  dispatches by calling feature functions, not by mutating shared globals.
+- **CSP gains `'strict-dynamic'`** so the nonce'd module entry can import the graph; classic
+  globals (`zoom`/`i18n`/`spell`) load first, then the deferred modules.
+- **Webview type-checking safety net:** `media/jsconfig.json` + `globals.d.ts` (`checkJs`) validate
+  the whole module graph (0 errors); the refactor was validated line-by-line against a backup.
+
+## [1.4.0] - 2026-06-22
+
+### Internal
+- **Host god-file modularized — `extension.ts` 1923 → 440 lines, no file > 500.** Extracted, with
+  explicit dependencies (no global bridges): `attachmentStore.ts` (the `.attach` sidecar class),
+  `inference.ts` (the agentic loop), `messageRouter.ts` (the ~50-case webview→host dispatch),
+  `chatOps.ts` (send/fork/regenerate/variants), `webviewHtml.ts`, `systemPrompt.ts`, `summary.ts`
+  (rolling summarization), `loadModels.ts`, `ttsBackend.ts`, `localModels.ts` (managed Ollama +
+  trees + TTS/engine commands). `tsc` is the completeness net; 48 tests still pass.
+
+## [1.3.9] - 2026-06-22
+
+### Internal
+- Extracted `chatOps.ts` (chat-turn operations) from `extension.ts` (→ under 1000 lines).
+
+## [1.3.8] - 2026-06-22
+
+### Internal
+- Extracted `messageRouter.ts` — the large `onDidReceiveMessage` switch — behind a typed context.
+
+## [1.3.7] - 2026-06-22
+
+### Internal
+- Extracted the `AttachmentStore` class and the `runInference` module from `extension.ts`.
+
+## [1.3.6] - 2026-06-22
+
+### Internal
+- Extracted the webview HTML/CSP builder into `webviewHtml.ts`.
+
+## [1.3.5] - 2026-06-22
+
+### Internal
+- Split the monolithic `media/style.css` by concern into four files (≤500 lines each):
+  `style.css`, `find.css`, `messages.css`, `composer.css`, linked in order.
+
+## [1.3.4] - 2026-06-22
+
+### Fixed
+- Regressions from the 1.3.3 webview extraction: Find's replace-advance and the Mermaid diagram
+  height. Removed a stale Mermaid SVG cache (always render fresh) and fixed the find refresh call.
+
 ## [1.3.3] - 2026-06-22
 
 ### Internal

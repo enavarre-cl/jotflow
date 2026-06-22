@@ -33,7 +33,7 @@ graph TB
   end
 
   subgraph Web["Webviews — sandbox (media/**)"]
-    MAIN["main.js + style.css<br/>chat editor UI"]
+    MAIN["app/main.js (ES modules)<br/>chat editor UI"]
     MODELS["models.js<br/>HF model browser"]
     SPELL["spell.js + spell-engine.js<br/>nspell"]
     I18N["i18n.js<br/>UI translation"]
@@ -60,10 +60,20 @@ graph TB
 
 ## 2. Module map
 
+> **Modularization invariant: no source file exceeds 500 lines.** The former god-files were
+> split by concern (high cohesion, low coupling) with **explicit dependencies** — no global
+> bridges. The host passes deps as plain function args / a single context object; the webview
+> uses real ES-module `import`/`export`.
+
 ```mermaid
 graph LR
-  subgraph entry["Entry / orchestration"]
-    extension["extension.ts<br/>(1.9k LoC)"]
+  subgraph entry["Entry / orchestration (each ≤500 LoC)"]
+    extension["extension.ts (440)<br/>activate · ChatEditorProvider"]
+    router["messageRouter.ts<br/>webview→host dispatch (~50 cases)"]
+    chatOps["chatOps.ts<br/>send/fork/regenerate/variants"]
+    inference["inference.ts<br/>agentic loop"]
+    attach["attachmentStore.ts<br/>.attach sidecar"]
+    misc["webviewHtml · systemPrompt · summary<br/>loadModels · ttsBackend · localModels"]
   end
   subgraph chat["Chat document"]
     chatDocument["chatDocument.ts"]
@@ -106,10 +116,12 @@ graph LR
     utils["download.ts · net.ts · audio.ts"]
   end
 
+  extension --> router --> chatOps --> inference
   extension --> chatDocument
-  extension --> index --> openai & gemini & anthropic & ollamaP
+  inference --> index --> openai & gemini & anthropic & ollamaP
   index --> types
-  extension --> toolsTs --> mcp
+  inference --> toolsTs --> mcp
+  chatOps --> attach
   extension --> omanager & odl & ocat
   extension --> piper
   extension --> views & mpanel & vpanel & dpanel & compare
@@ -118,8 +130,8 @@ graph LR
 ```
 
 **Pure, testable cores** (no VS Code / no network, unit-tested in `src/test/`):
-`ollama/parse.ts`, `ollama/assets.ts`, `providers/multimodal.ts`, `net.ts`, `audio.ts`,
-`download.ts`.
+`chatHelpers.ts`, `findReplace.ts`, `ollama/parse.ts`, `ollama/assets.ts`,
+`providers/multimodal.ts`, `net.ts`, `audio.ts`, `download.ts`.
 
 ---
 
@@ -196,9 +208,9 @@ runaway-line cap), `multimodal.ts` (attachment + image-output detection), `httpE
 
 ```mermaid
 sequenceDiagram
-  participant W as Webview (main.js)
-  participant H as handleSend (extension.ts)
-  participant R as runInference
+  participant W as Webview (app/main.js)
+  participant H as handleSend (chatOps.ts)
+  participant R as runInference (inference.ts)
   participant P as Provider
   participant T as ToolHub
   participant LLM as LLM API
@@ -294,16 +306,33 @@ sentence chunks and plays the returned WAV.
 
 ## 8. Webviews
 
-| Webview | Script | Role |
-|---|---|---|
-| Chat editor | `main.js` (+ `style.css`) | messages, Markdown + Mermaid rendering, find/replace, composer, `@file` & emoji autocomplete, spell overlay, TTS, tooltips, two-step delete |
-| Model browser | `models.js` (+ `models.css`) | search HF, pick quant, download |
-| Voices / Dictionary / Compare | `voices.js` · `dictionary.js` · `compare.js` | small panels |
-| Shared | `i18n.js` · `spell.js` + `spell-engine.js` · `zoom.js` | translation · nspell spell-check · zoom |
+The **chat editor** is a graph of **ES modules** (`<script type="module">`) under `media/`,
+grouped by concern (each ≤500 lines, explicit `import`/`export` — no `window.*` bridges):
 
-Spell-check runs **in the webview** (`nspell` + bundled hunspell dictionaries in `media/dict`),
-drawing a wavy underline on a mirror "backdrop" behind the textarea. The model browser does the
-HF search **through the host** (it has no network).
+| Layer (`media/`) | Modules | Role |
+|---|---|---|
+| `core/` | `vscode` · `icons` · `i18n` · `dom` | VS Code API handle, SVG icons, `t()`, DOM helpers + tooltips |
+| `render/` | `markdown` · `mermaid` | Markdown renderer (memoized) · Mermaid render + pan/zoom viewer |
+| `ui/` | `store` · `notifications` | single owner of `doc` (getDoc/setDoc/subscribe) · banners + summarizing indicator |
+| `features/` | `tts` · `find` · `autocomplete` · `spell` | read-aloud · find&replace · emoji/`@file` popups · spell overlay |
+| `chat/` | `message` · `conversation` · `composer` | one bubble · render + streaming + side panels · input/attachments/send |
+| `panels/` | `config` · `models` | ⚙ params + voices · status + model selector + context-budget bar |
+| `app/` | `protocol` · `main` | host→webview message dispatch · bootstrap + wiring |
+
+The **entry** is `app/main.js`; classic scripts that publish window globals
+(`zoom.js` → `LangZoom`, `i18n.js` → `LangI18n`, `spell-engine.js`/`spell.js` → `LangSpell`)
+load **first**, then the deferred module graph. **State has single owners**: `ui/store.js`
+owns `doc`; `chat/conversation.js` owns the streaming/tool state; `chat/composer.js` owns the
+send busy-state. The **protocol** dispatches host messages by calling feature functions — it
+never mutates another module's state directly. A `media/jsconfig.json` + `globals.d.ts`
+type-check the whole graph with `checkJs` (the webview has no runtime tests, so this catches
+broken imports / undefined identifiers).
+
+Other webviews stay single classic scripts: **model browser** (`models.js` + `models.css`),
+and the small **voices / dictionary / compare** panels. Spell-check runs **in the webview**
+(`nspell` + bundled hunspell dictionaries in `media/dict`), drawing a wavy underline on a
+mirror "backdrop" behind the textarea. The model browser does the HF search **through the
+host** (it has no network).
 
 ---
 
@@ -338,16 +367,20 @@ graph LR
   Piper, voices, GGUFs) are **SHA-256 verified** before use (fail-closed). `web_fetch` blocks SSRF:
   it validates the resolved IP **at connect time** (anti DNS-rebinding) and re-checks the host at
   every redirect hop.
-- **Webview CSP**: scripts are **nonce-locked** (`script-src 'nonce-…'`, no inline/eval); the
-  lazily-loaded Mermaid bundle carries that nonce. `style-src` allows `'unsafe-inline'` only
-  because Mermaid embeds a `<style>` in its SVG; diagrams render with `securityLevel: 'strict'`.
+- **Webview CSP**: scripts are **nonce-locked** (`script-src 'nonce-…' 'strict-dynamic'`, no
+  inline/eval). `'strict-dynamic'` lets the nonce'd module entry (`app/main.js`) statically
+  import the rest of the graph (imports carry no nonce); the lazily-loaded Mermaid bundle is
+  injected with that nonce. `style-src` allows `'unsafe-inline'` only because Mermaid embeds a
+  `<style>` in its SVG; diagrams render with `securityLevel: 'strict'`.
 
 ---
 
 ## 11. Build & packaging
 
 - TypeScript (`src/**` → `out/**`) via `tsc`; ESLint; tests via `node:test` (`src/test/`).
-- Webview assets (`media/**`) ship as-is.
+- Webview assets (`media/**`) ship as-is — the chat UI is hand-authored **ES modules** served
+  via `asWebviewUri` (no bundler). They are type-checked (not emitted) by `media/jsconfig.json`
+  (`checkJs` + `globals.d.ts`); run `npx tsc -p media/jsconfig.json` to validate the graph.
 - Packaged with `@vscode/vsce`; published from `master` by a **manual** GitHub Actions
   workflow (`.github/workflows/release.yml`) gated by a `marketplace` environment approval.
   The published version is `package.json`'s `version` (idempotent — re-publishing an existing
@@ -357,7 +390,9 @@ graph LR
 
 ## Where to start reading
 
-1. `src/extension.ts` — `activate()`, the `ChatEditorProvider`, and `runInference` (the loop).
+1. `src/extension.ts` — `activate()` and the `ChatEditorProvider` wiring; then
+   `src/messageRouter.ts` (dispatch), `src/chatOps.ts` (turn ops), `src/inference.ts` (the loop).
 2. `src/providers/types.ts` + `index.ts` — the LLM abstraction.
 3. `src/chatDocument.ts` — the `.chat` data model.
-4. `media/main.js` — the chat webview.
+4. `media/app/main.js` — the chat webview entry; then `media/app/protocol.js` and the
+   `core/ → render/ → ui/ → features/ → chat/ → panels/` module layers.
