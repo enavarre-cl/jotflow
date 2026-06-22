@@ -31,7 +31,9 @@ export function renderWebviewHtml(
       // 'unsafe-inline' is required by Mermaid: it embeds a <style> element inside the rendered
       // SVG (which carries no nonce). Scripts stay nonce-locked, so this only loosens styling.
       `style-src ${webview.cspSource} 'unsafe-inline'`,
-      `script-src 'nonce-${nonce}'`,
+      // 'strict-dynamic': the nonce'd module entry (app/main.js) statically imports the rest of the
+      // webview modules; strict-dynamic propagates trust to those imports (they carry no nonce).
+      `script-src 'nonce-${nonce}' 'strict-dynamic'`,
       `font-src ${webview.cspSource}`,
       `img-src ${webview.cspSource} data: blob:`,
       `media-src ${webview.cspSource} data: blob:`,
@@ -201,14 +203,13 @@ export function renderWebviewHtml(
   window.I18N_BUNDLE = ${JSON.stringify(bundle)};
   window.MERMAID_SRC = '${uri('mermaid.min.js')}'; // lazy-loaded on first Mermaid block
   window.PARLEY_NONCE = '${nonce}';                // so the lazy <script> passes the CSP</script>
+  <!-- Classic scripts set window globals (LangZoom / LangI18n / LangSpell) consumed by the modules. -->
   <script nonce="${nonce}" src="${uri('zoom.js')}"></script>
   <script nonce="${nonce}" src="${uri('i18n.js')}"></script>
   <script nonce="${nonce}" src="${uri('spell-engine.js')}"></script>
   <script nonce="${nonce}" src="${uri('spell.js')}"></script>
-  <script nonce="${nonce}" src="${uri('markdown.js')}"></script>
-  <script nonce="${nonce}" src="${uri('mermaid-view.js')}"></script>
-  <script nonce="${nonce}" src="${uri('find.js')}"></script>
-  <script nonce="${nonce}" src="${uri('main.js')}"></script>
+  <!-- ES module entry: imports the full webview module graph (deferred → runs after the classics). -->
+  <script type="module" nonce="${nonce}" src="${uri('app/main.js')}"></script>
 </body>
 </html>`;
 }

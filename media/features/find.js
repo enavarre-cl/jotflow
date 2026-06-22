@@ -1,15 +1,14 @@
 /**
- * In-chat find & replace (VS Code-style) for the webview. Self-contained; receives the vscode
- * API via PFind.setApi(). Exposed as window.PFind. Loaded before main.js.
+ * In-chat find & replace (VS Code-style) for the webview. Self-contained.
  */
-(function () {
-  const t = (s) => window.LangI18n.t(s);
-  const $ = (id) => document.getElementById(id);
-  const messagesEl = $('messages');
-  let vscode = { postMessage() {} }; // set by PFind.setApi()
+import { t } from '../core/i18n.js';
+import { $ } from '../core/dom.js';
+import { vscode } from '../core/vscode.js';
+
+const messagesEl = $('messages');
   // ---- In-chat search (Ctrl/Cmd+F) ----
   const findBar = $('findBar');
-  const findInput = $('findInput');
+  const findInput = /** @type {HTMLInputElement} */ ($('findInput'));
   const findCount = $('findCount');
   let findHits = [];   // <mark> highlights, in document order
   let findIdx = -1;    // index of the "current" hit
@@ -164,7 +163,7 @@
   bindFindOpt('optPreserveCase', 'preserveCase', false);
 
   // ---- Replace (find's second row; like VS Code) ----
-  const replaceInput = $('replaceInput');
+  const replaceInput = /** @type {HTMLInputElement} */ ($('replaceInput'));
   const findReplaceRow = $('findReplaceRow');
   const findToggleReplace = $('findToggleReplace');
   function setReplaceVisible(v) {
@@ -212,5 +211,4 @@
   $('replaceOne').addEventListener('click', replaceCurrent);
   $('replaceAll').addEventListener('click', replaceAll);
 
-  window.PFind = { setApi(v) { vscode = v; }, open: openFind, close: closeFind, refresh: refreshFind, setReplaceVisible };
-})();
+export { openFind, closeFind, refreshFind, setReplaceVisible };

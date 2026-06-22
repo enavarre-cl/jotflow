@@ -1,9 +1,9 @@
 /**
- * Mermaid diagram rendering + GitHub-style pan/zoom viewer for the chat webview. Self-contained
- * (only needs window.LangI18n); exposed as window.PMermaid. Loaded before main.js.
+ * Mermaid diagram rendering + GitHub-style pan/zoom viewer for the chat webview.
+ * Self-contained (needs the vendored window.mermaid global, lazy-loaded). Entry: processMermaid.
  */
-(function () {
-  const t = (s) => window.LangI18n.t(s); // translation (English is the key)
+import { t } from '../core/i18n.js';
+
   // ── Mermaid diagrams ───────────────────────────────────────────────────────
   // The library (~3MB) is loaded lazily the first time a chat actually contains a
   // ```mermaid block, so webviews without diagrams pay nothing.
@@ -150,7 +150,7 @@
       const vb = el.getAttribute('viewBox');
       if (vb) { const p = vb.split(/[\s,]+/).map(Number); w = p[2]; h = p[3]; }
       if (!w || !h) { w = parseFloat(el.getAttribute('width')) || 800; h = parseFloat(el.getAttribute('height')) || 600; }
-      el.setAttribute('width', w); el.setAttribute('height', h); el.style.maxWidth = 'none';
+      el.setAttribute('width', String(w)); el.setAttribute('height', String(h)); el.style.maxWidth = 'none';
       const xml = new XMLSerializer().serializeToString(el);
       const url = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)));
       const img = new Image();
@@ -265,5 +265,5 @@
     requestAnimationFrame(() => pz.fit()); // once laid out: fit the whole diagram, centred
   }
 
-  window.PMermaid = { process: processMermaid };
-})();
+
+export { processMermaid };
