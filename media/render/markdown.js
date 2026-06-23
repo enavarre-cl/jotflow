@@ -36,7 +36,10 @@ function deLatex(t) {
 function inlineMd(text) {
   let t = escapeHtml(text);
   const codes = [];
-  t = t.replace(/`([^`]+)`/g, (_, c) => { codes.push(c); return ' ' + (codes.length - 1) + ' '; });
+  // Stash code-spans behind a NUL-delimited index placeholder. A space-delimited number ` 0 `
+  // collided with ordinary prose ("entre 0 y 1"), turning digits into <code> and leaking
+  // <code>undefined</code>. NUL never appears in chat text, so it can't collide.
+  t = t.replace(/`([^`]+)`/g, (_, c) => { codes.push(c); return '\u0000' + (codes.length - 1) + '\u0000'; });
   t = deLatex(t); // Inline LaTeX → Unicode (code-spans are already protected above)
   t = t.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, url) => {
     // Scheme allowlist: blocks javascript:/data:/vbscript:… (defense-in-depth on top of CSP).
@@ -52,7 +55,7 @@ function inlineMd(text) {
   t = t.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
   t = t.replace(/(^|[\s(])_([^_\n]+)_(?=[\s.,!?)]|$)/g, '$1<em>$2</em>');
   t = t.replace(/~~([^~]+)~~/g, '<del>$1</del>');
-  t = t.replace(/ (\d+) /g, (_, i) => '<code>' + codes[i] + '</code>');
+  t = t.replace(/\u0000(\d+)\u0000/g, (_, i) => '<code>' + codes[i] + '</code>');
   return t;
 }
 

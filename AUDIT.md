@@ -35,7 +35,7 @@
 - ⬜ A7 🟡 mcp servidor caído cuelga 30s · ⬜ A8 🟡 inference traga error de args JSON · ⬜ A9 ⚪ MAX_ITERS=0 sin tope · ⬜ A10 ⚪ mcp descarta stderr
 
 **Webview**
-- ⬜ W1 🟡 botón regenerar ausente tras tools (reportado) · ⬜ W2 🟠 colisión placeholder code-span · ⬜ W3 🟡 listas anidadas se aplanan
+- ⬜ W1 🟡 botón regenerar ausente tras tools (reportado) · ✅ W2 🟠 colisión placeholder code-span · ⬜ W3 🟡 listas anidadas se aplanan
 - ⬜ W4 🟡 processMermaid flotante + race · ⬜ W5 🟡 conversation.js god-view (refactor) · ⬜ W6 ⚪ escapeHtml revienta con no-string · ⬜ W7 ⚪ mermaid unescape deprecado
 
 **Host / orquestación**
@@ -131,7 +131,7 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 
 - **[Media] BUG `media/chat/conversation.js:329` (reportado por el usuario, 2026-06-22)** — Al abrir un `.chat` cuyo último intercambio **usó tools**, el botón de **regenerar la respuesta** no aparece en el bubble del usuario. `canRegenFromPrompt` asume que la respuesta está en `i+1` y es `lastDisplayable`: `m.role==='user' && visible[i+1].role==='assistant' && (i+1)===lastDisplayable`. Con tools, el doc es `[user, assistant(toolCalls), tool, assistant(final)]`, así que `visible[i+1]` es el assistant intermedio con `toolCalls` (no displayable) y `(i+1)!==lastDisplayable` → la condición falla. Debe comprobar que **no hay un user posterior** y que `lastDisplayable` es un assistant tras `i`, en vez de exigir adyacencia. (Verificado contra la foto: solo aparece ⏩ "Continue" en el assistant final.)
 
-- **[Alta] BUG `markdown.js:39,52`** — **Corrupción de datos**: el placeholder de code-spans usa ` dígito ` y colisiona con números del texto. Verificado: `"entre 0 y 1 … \`x\`"` → emite `<code>undefined</code>`. Frases cotidianas se rompen.
+- **✅ [Alta] BUG `markdown.js:39,52` — CORREGIDO** — placeholder de code-spans pasa de ` dígito ` a ` dígito ` (NUL, jamás en prosa) → "entre 0 y 1 hay `x`" ya no corrompe los números ni emite `<code>undefined</code>`. (verificado)
 - **[Media] BUG `markdown.js:130-141`** — **Listas anidadas se aplanan** (se descarta la indentación) → toda jerarquía se pierde en el render.
 - **[Media] BUG `conversation.js:448,458` + `message.js`** — `processMermaid` es promesa flotante (K2) y hay **race**: `renderConversation` hace `innerHTML=''`; si `mermaid.render` resuelve tras el re-render, opera sobre un nodo desconectado → diagramas que "desaparecen".
 - **[Media] CONVENCIÓN `conversation.js` (477 líneas)** — **God-view**: render + estado de streaming + `stableSplit` + panels + editor de summary (≈30 líneas duplicadas de `message.js`) + export con **CSS embebido en JS** (M9). Debe partirse (N1/N2). Hay además **dependencia circular** `conversation.js ↔ message.js` (M7).
