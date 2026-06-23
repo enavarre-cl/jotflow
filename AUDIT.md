@@ -14,9 +14,9 @@
 
 ## 📋 Inventario completo (74 hallazgos: 67 auditoría + W8 + 6 de la 2.ª pasada)
 
-> **Estado: 63 ✅ corregidos · 8 🔎 revisados/por-diseño · 3 ⬜ abiertos.**
-> **B4 y models.js: cerrados.** Solo queda el `any` de **frontera** (json de API, mensajes webview, args de
-> comandos VS Code) que el propio `eslint.config.js` desactiva a propósito — ver X1.
+> **Estado: 72 ✅ corregidos · 2 🔎 revisados/por-diseño (H3, L7 — no son bugs) · 0 ⬜ abiertos.**
+> **Cerrados en esta tanda final:** P11 (validación baseUrl), P12 (request bodies tipados),
+> H9 (CSP acotada a Mermaid), **X1 (`any` 182→0 en todo `src/`)**, X4 (higiene de archivos).
 > ✅ = corregido y commiteado · 🔎 = revisado, no era bug / por diseño · ⬜ = abierto.
 > Severidad: 🔴 crítico · 🟠 alta · 🟡 media · ⚪ baja/convención.
 
@@ -30,7 +30,7 @@
 - ✅ P1 stream flush final · ✅ P2 stream reader release · ✅ P3 🟠 AbortSignal chequeado en read-loop
 - ✅ P4 🟡 timeout de red · ✅ P5 🟡 tool-call id con índice · ✅ P6 🟡 isImageOutputModel ajustado
 - ✅ P7 🟡 anthropic temperature:1 fijado · ✅ P8 🟡 defensive cap 64MiB · ✅ P9 🟡 gemini functionResponse valida toolName
-- ✅ P10 ⚪ multiple tool_calls por id · 🔎 P11 revisado: premisa incorrecta (baseUrl es settings, no .chat) · 🔎 P12 🟡 `any` en bodies de request (frontera, por diseño — ver X1)
+- ✅ P10 ⚪ multiple tool_calls por id · ✅ P11 🟡 baseUrl validado (esquema http(s) + rechazo de API key sobre http no-loopback; `f23152e`) · ✅ P12 🟡 cuerpos de request tipados (`Record<string,unknown>`/`TokenUsage`/parts tipados; `8bf18c2`)
 
 **Loop agéntico / tools**
 - ✅ A1 🟠 abort persiste assistant+toolCalls sin respuesta · ✅ A2 🟠 tools en paralelo · ✅ A3 🟡 fs_search asíncrono
@@ -45,7 +45,7 @@
 **Host / orquestación**
 - ✅ H1 🟠 secrets.onDidChange sin disposable · ✅ H2 router floating promise · 🔎 H3 revisado: NO es bug (convención F4, funcionalmente correcto)
 - ✅ H4 🟠 summary.upTo sin validar rango · ✅ H5 🟡 busyRef: setConfig bajo lock · ✅ H6 🟡 exportHtml con CSP+nonce
-- ✅ H7 🟡 nonce crypto unificado · ✅ H8 🟡 modelsPanel valida import paths · 🔎 H9 ⚪ CSP unsafe-inline (aceptada: requerida por Mermaid) · ✅ H10 ⚪ IDs con randomUUID
+- ✅ H7 🟡 nonce crypto unificado · ✅ H8 🟡 modelsPanel valida import paths · ✅ H9 ⚪ CSP unsafe-inline: la app ya **no** depende de ella (barra de progreso `style=`→CSSOM); queda atribuible **solo** al SVG de Mermaid (atributos `style=` que ni nonce ni hash cubren), con el residual documentado y acotado (`9c11653`) · ✅ H10 ⚪ IDs con randomUUID
 
 **Motores locales**
 - ✅ L1 zombies tree-kill · ✅ L2 🟠 .onnx.json validado · ✅ L3 🟠 voz parcial revalidada · ✅ L4 🟡 importDir por subcarpeta de item
@@ -54,7 +54,7 @@
 **i18n / CSS / transversal**
 - ✅ I1 🟡 claves UI traducidas (24×5) · ✅ I2 ⚪ Reset / center (americano) · ✅ I3 ⚪ 2 claves muertas eliminadas
 - ✅ S1 ⚪ colores con tokens de tema · ✅ S2 ⚪ badges consolidados · ✅ S3 ⚪ anillo de foco · ✅ S4 ⚪ override muerto quitado
-- 🔎 X1 🟡 `any`: **internos eliminados** (22 catches→`unknown`+errMsg, stream data→`Buffer`, localModels; 182→155); los 155 restantes son frontera (json API, msg webview, args cmd) que ESLint permite a propósito · ✅ X2 🟡 M2 **6/6** (models.js partido: modelsFormat.js + NUL limpiados) · ✅ X3 ⚪ catch vacíos comentados · 🔎 X4 ⚪ higiene: archivos locales (tu decisión)
+- ✅ X1 🟡 `any` **ELIMINADO de todo `src/` (182→0)**: interfaces reales y genéricos (JsonRpc/`request<T>`, `Raw*` del `.chat`, respuestas de cada provider, `WebviewMessage`, `ChatPatch`, `ModelCard`, `ModelsTreeItem`, `TokenUsage`/`ChatResult`/`Attachment`); `unknown`+narrowing **solo** en fronteras JSON/VS Code reales (`d39586b`,`6a3b5ca`,`a7a6b01`,`eb2c2f5`,`0dc39d4`,`b0015c7`,`91495a1`,`e0cf976`) · ✅ X2 🟡 M2 **6/6** (models.js partido: modelsFormat.js + NUL limpiados) · ✅ X3 ⚪ catch vacíos comentados · ✅ X4 ⚪ higiene: `.webview-backup/` + `plan-*.md` borrados y `.gitignore` limpiado (`8bf18c2`)
 
 **Segunda pasada de caza (B1–B6, post-auditoría)**
 - ✅ B1/W9 🟠 streaming rompía bloques multilínea · ✅ B2 🟠 negrita con `*` interno corrompía · ✅ B3 🟡 celdas de tabla con `\|`/code-span
@@ -119,8 +119,8 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 - **✅ [Media] BUG `stream.ts:36` (P8) — CORREGIDO** — cap subido de 4MiB a 64MiB: una imagen base64 inline ya no se trunca; solo se recorta un stream realmente desbocado.
 - **✅ [Media] BUG `gemini.ts:69` (P9) — CORREGIDO** — `name: m.toolName || 'tool'`: un tool message malformado degrada en vez de mandar `undefined` y 400 toda la llamada.
 - **✅ [Baja] BUG `openai.ts:217` (P10) — CORREGIDO** — la clave del acumulador es `index` o, en su defecto, `id`: múltiples tool_calls completas en un delta ya no colapsan en slot 0.
-- **🔎 [reclasificado] (4 providers) (P11) — premisa incorrecta** — `baseUrl` viene de **settings locales**, NO del `.chat` (que solo guarda provider+model), así que no hay exfiltración vía `.chat` compartido. El residual (endpoint http puesto por el usuario) es necesario para local (Ollama/LM Studio). Sin cambio.
-- **🔎 [por diseño] (todos) (P12)** — `body: any`, `usage: any`, `parts: any[]` en cuerpos de request que el propio código construye (tipables). Viola C2/C3: `any` solo para JSON de entrada, no para lo que tú rellenas.
+- **✅ (4 providers) (P11) — CORREGIDO** (`f23152e`) — `buildProvider` pasa cada `baseUrl` por `validateBaseUrl` (módulo sin `vscode`, 8 tests): rechaza URL malformadas y esquemas no-http(s) (`file:`/`data:`/`javascript:`), y **rehúsa adjuntar la API key sobre http en claro a un host no-loopback**. El http a local sin key (Ollama/LM Studio) sigue permitido.
+- **✅ (todos) (P12) — CORREGIDO** (`8bf18c2`) — los cuerpos que el código **construye** (`body`/`usage`/`parts`/`options`/`reqBody`/`out`/`msg`/retornos `openAI*`) ahora son `Record<string,unknown>` / `TokenUsage` / parts tipados, **no `any`**. Solo el `res.json()` de **entrada** queda como frontera (la excepción que C3 sí permite). Parte del cierre total de X1.
 
 ## 🟠 Loop agéntico y tools (`src/inference.ts`, `tools.ts`, `mcp.ts`)
 
@@ -158,7 +158,7 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 - **✅ [Media] BUG `messageRouter.ts:364` (H6) — CORREGIDO/mitigado** — el HTML exportado lleva una CSP estricta con `nonce` para el script de auto-print (bloquea frames/objects/fetch/forms y cualquier inline script inesperado). El cuerpo ya iba escapado (renderMarkdown), así que el modelo no podía inyectar script; esto es defensa en profundidad.
 - **✅ [Media] BUG `modelsPanel.ts:18` / `compareView.ts:96` (H7) — CORREGIDO** — ambos usan `makeNonce()`, que ahora es `crypto.randomBytes(16).toString('hex')` (128 bits, longitud fija). Se eliminó el `nonce()` con `Math.random` de modelsPanel y el patrón que recortaba entropía en compareView y en el propio `makeNonce`.
 - **✅ [Media] BUG `modelsPanel.ts` (H8) — CORREGIDO/mitigado** — la escritura local ya saneaba el basename (`downloads.ts:204`); se añade validación de frontera en `doPull` que rechaza import paths absolutos o con `..`. (El residual de la URL HF se queda en huggingface.co, SSRF-safe por C6.)
-- **🔎 [aceptada] `webviewHtml.ts:33` (H9)** — CSP con `style-src 'unsafe-inline'` (justificado por Mermaid) → cualquier `style=` inyectado pasa; depende del sanitizador.
+- **✅ `webviewHtml.ts` (H9) — CORREGIDO/acotado** (`9c11653`) — la **única** dependencia propia de `style-src 'unsafe-inline'` era la barra de descarga (`models.js`, atributo `style="width:…"`); ahora fija el ancho por **CSSOM** (`.style.width`, no gobernado por CSP) con `width:0` por CSS. Tras esto, `'unsafe-inline'` es atribuible **solo** al SVG que genera Mermaid (atributos `style=` por nodo, que CSP no puede autorizar con nonce ni hash). El comentario de la CSP documenta el riesgo residual acotado (script-src sigue nonce+strict-dynamic, `default-src 'none'`, `connect-src` limitado) y el follow-up (sandbox-iframe de Mermaid) — no se reescribe a ciegas el visor de pan/zoom/sizing recién estabilizado.
 - **✅ [Baja] BUG `extension.ts:194` / `attachmentStore.ts:66` (H10) — CORREGIDO** — IDs de mensaje y attachment usan `crypto.randomUUID()` (sin colisión en bucle síncrono).
 
 ## 🟠 Motores locales (Ollama / Piper / descargas)
@@ -191,10 +191,10 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 
 ## Transversales
 
-- **🔎 PARCIAL — `any` en lógica interna (X1 + P12)** — **Hecho** (commit `77e4d79`): `errMsg(unknown)` tipado y eliminados los `any` internos mal tipados de `localModels.ts` (catches → `errMsg(e)`, `which: string`). **Quedan ~180, pero son FRONTERA LEGÍTIMA, no errores**: JSON dinámico de APIs externas (providers/http), args de comandos de VS Code (la API los tipa `any`), errores capturados. El propio `eslint.config.js` **desactiva `no-explicit-any` a propósito** ("the code handles dynamic JSON on purpose"), así que convertirlos a `unknown`+narrowing es churn sin beneficio en runtime y contra la política del repo. No es deuda pendiente de cierre — es decisión de diseño.
+- **✅ TOTAL — `any` eliminado de `src/` (X1) — 182 → 0** — no se reclasificó: se **tipó de verdad**. Tipos/genéricos reales en cada capa: `JsonRpcRequest/Response` + `request<T>()` (mcp), familia `Raw*` del parseo `.chat`, interfaces de respuesta/stream de **cada provider**, `WebviewMessage` (router) y `ModelsPanelMessage`, `ChatPatch` (config), `ModelCard`, `ModelsTreeItem`, `TokenUsage`/`ChatResult`/`Attachment`, firmas `fetch`/`dns`/`undici.Dispatcher` (http), `Hf*`/`Ollama*` (catalog/registry). `unknown`+narrowing queda **solo** donde un valor cruza de verdad la frontera JSON/VS Code (resultado crudo de `JSON.parse`, un escalar "quizá-número"), que es la práctica correcta del límite — distinta del alias perezoso `any→unknown`. Verificado: `grep` de cualquier forma de `any`-como-tipo en `src/` = 0. Commits `d39586b`,`6a3b5ca`,`a7a6b01`,`eb2c2f5`,`0dc39d4`,`b0015c7`,`91495a1`,`e0cf976`.
 - **✅ [M2] 6 archivos 400–500 — REDUCIDOS** (split por cohesión): `conversation.js` 500→382 (+export.js+panels.js), `messageRouter.ts` 445→394 (+sysprompt), `panels/config.js` 407→287 (+configTts.js), `piper/manager.ts` 481→413 (+assets.ts), `extension.ts` 449→404 (+applyPatch.ts). **Pendiente:** `media/models.js` (409) es un IIFE clásico (no ES module, `<script src>`); partirlo a ciegas (sin poder correr la app) es riesgoso y solo está 9 líneas sobre la alarma blanda — diferido a una sesión con la app corriendo.
 - **✅ `catch` vacíos (X3) — CORREGIDO** — comentados como best-effort (tts logging/audio, pointer capture).
-- **🔎 Higiene (X4) — decisión del usuario** — `.webview-backup/` (gitignored) y `plan-*.md` (no trackeados) no afectan el repo ni el paquete; son archivos locales tuyos, no los borro sin permiso.
+- **✅ Higiene (X4) — HECHO** (`8bf18c2`) — `.webview-backup/` y `plan-improvements.md`/`plan-todo.md` borrados (por orden del usuario) y la línea `.webview-backup/` eliminada de `.gitignore`.
 
 ---
 
