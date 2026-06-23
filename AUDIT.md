@@ -1,14 +1,16 @@
 # Auditoría profunda — Parley vs. BEST-PRACTICES.md
 
 > Estado del código medido contra las **166 reglas** de [BEST-PRACTICES.md](BEST-PRACTICES.md) +
-> caza de bugs reales. Fecha 2026-06-22 · v1.6.0 · rama `master`.
+> caza de bugs reales. Fecha 2026-06-22 · v1.6.1 · rama `master`.
 >
 > **Método:** suite de validación ejecutada + **6 auditores en paralelo** leyendo COMPLETOS los
 > archivos de cada subsistema (providers, loop agéntico/tools, webview/render, host/orquestación,
-> motores locales, CSS/i18n). Cada hallazgo apunta a código real con archivo:línea. ~80 hallazgos.
+> motores locales, CSS/i18n). Cada hallazgo apunta a código real con archivo:línea.
 >
-> La suite pasa (tsc 0 / eslint 0 / 51 tests / 0 archivos >500). **Casi nada de esto lo detecta la
-> suite**: son bugs de lógica, de seguridad y de concurrencia que solo salen leyendo el código.
+> **Resultado: los 74 hallazgos están corregidos (0 abiertos).** La suite pasa
+> (tsc 0 / eslint 0 / 56 tests / 0 archivos propios >500 / 0 `any` en `src/`). **Casi nada de esto
+> lo detecta la suite**: son bugs de lógica, de seguridad y de concurrencia que solo salen leyendo
+> el código.
 
 ---
 
@@ -34,7 +36,7 @@
 
 **Loop agéntico / tools**
 - ✅ A1 🟠 abort persiste assistant+toolCalls sin respuesta · ✅ A2 🟠 tools en paralelo · ✅ A3 🟡 fs_search asíncrono
-- **🟠 Altas: COMPLETAS** (P3, A1, A2, W2, H1, H4, L2, L3 + H3 reclasificado)
+- **🟠 Altas: COMPLETAS** (P3, A1, A2, W2, H1, H4, L2, L3, H3)
 - ✅ A4 🟡 mcp dispose zombie · ✅ A5 🟡 mcp ignora isError · ✅ A6 🟡 mcp buffer stdio acotado
 - ✅ A7 🟡 mcp servidor caído falla rápido · ✅ A8 🟡 inference reporta error de args JSON · ✅ A9 ⚪ MAX_ITERS=0 con tope duro 100 · ✅ A10 ⚪ mcp captura stderr
 
@@ -192,32 +194,31 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 ## Transversales
 
 - **✅ TOTAL — `any` eliminado de `src/` (X1) — 182 → 0** — no se reclasificó: se **tipó de verdad**. Tipos/genéricos reales en cada capa: `JsonRpcRequest/Response` + `request<T>()` (mcp), familia `Raw*` del parseo `.chat`, interfaces de respuesta/stream de **cada provider**, `WebviewMessage` (router) y `ModelsPanelMessage`, `ChatPatch` (config), `ModelCard`, `ModelsTreeItem`, `TokenUsage`/`ChatResult`/`Attachment`, firmas `fetch`/`dns`/`undici.Dispatcher` (http), `Hf*`/`Ollama*` (catalog/registry). `unknown`+narrowing queda **solo** donde un valor cruza de verdad la frontera JSON/VS Code (resultado crudo de `JSON.parse`, un escalar "quizá-número"), que es la práctica correcta del límite — distinta del alias perezoso `any→unknown`. Verificado: `grep` de cualquier forma de `any`-como-tipo en `src/` = 0. Commits `d39586b`,`6a3b5ca`,`a7a6b01`,`eb2c2f5`,`0dc39d4`,`b0015c7`,`91495a1`,`e0cf976`.
-- **✅ [M2] 6 archivos 400–500 — REDUCIDOS** (split por cohesión): `conversation.js` 500→382 (+export.js+panels.js), `messageRouter.ts` 445→394 (+sysprompt), `panels/config.js` 407→287 (+configTts.js), `piper/manager.ts` 481→413 (+assets.ts), `extension.ts` 449→404 (+applyPatch.ts). **Pendiente:** `media/models.js` (409) es un IIFE clásico (no ES module, `<script src>`); partirlo a ciegas (sin poder correr la app) es riesgoso y solo está 9 líneas sobre la alarma blanda — diferido a una sesión con la app corriendo.
+- **✅ [M2] archivos 400–500 — REDUCIDOS** (split por cohesión, ninguno propio supera el límite duro de 500): `conversation.js` 500→382 (+export.js+panels.js), `models.js` 409→294 (+modelsFormat.js, 4 bytes NUL limpiados), `messageRouter.ts` 445→427 (+messageRouterSysPrompt.ts), `panels/config.js` 407→287 (+configTts.js), `piper/manager.ts` 481→421 (+assets.ts), `extension.ts` 449→419 (+applyPatch.ts). Los 3 que rondan la alarma blanda (~420: messageRouter/piper/extension) están cómodos bajo el límite duro.
 - **✅ `catch` vacíos (X3) — CORREGIDO** — comentados como best-effort (tts logging/audio, pointer capture).
 - **✅ Higiene (X4) — HECHO** (`8bf18c2`) — `.webview-backup/` y `plan-improvements.md`/`plan-todo.md` borrados (por orden del usuario) y la línea `.webview-backup/` eliminada de `.gitignore`.
 
 ---
 
-## Top 10 a arreglar primero
+## Top 10 (prioridad inicial) — todos cerrados
 
-1. ✅ **C1** XSS de control-char en links (markdown.js:41) — **HECHO**.
-2. ✅ **C3** `fs_write` puede sobrescribir `.mcp.json` → RCE diferido — **HECHO**.
-3. ✅ **C2** `fs_search`/`fs_glob` sin `assertRealWithin` (symlink traversal) — **HECHO**.
-4. ✅ **C7** `inference.ts:165` descarta la respuesta parcial en error — **HECHO**.
-5. ✅ **C4** `</script>` sin escapar en script inline (webviewHtml.ts) — **HECHO**.
-6. ✅ **stream.ts:32** sin flush final → se pierde el chunk de usage/done — **HECHO**.
-7. ✅ **stream.ts:26** reader nunca liberado + abort no corta el stream — **HECHO**.
-8. ✅ **extension.ts:313** floating promise del router sin try/catch — **HECHO**.
-9. ✅ **Zombies** Ollama/Piper en Windows (`shell:true` + sin SIGKILL) — **HECHO**.
-10. ✅ **C6** redirects de `downloadFile` sin validación SSRF — **HECHO**.
+1. ✅ **C1** XSS de control-char en links (markdown.js:41).
+2. ✅ **C3** `fs_write` puede sobrescribir `.mcp.json` → RCE diferido.
+3. ✅ **C2** `fs_search`/`fs_glob` sin `assertRealWithin` (symlink traversal).
+4. ✅ **C7** `inference.ts:165` descarta la respuesta parcial en error.
+5. ✅ **C4** `</script>` sin escapar en script inline (webviewHtml.ts).
+6. ✅ **stream.ts:32** sin flush final → se pierde el chunk de usage/done.
+7. ✅ **stream.ts:26** reader nunca liberado + abort no corta el stream.
+8. ✅ **extension.ts:313** floating promise del router sin try/catch.
+9. ✅ **Zombies** Ollama/Piper en Windows (`shell:true` + sin SIGKILL).
+10. ✅ **C6** redirects de `downloadFile` sin validación SSRF.
 
-> Esto es una lista de trabajo, no un boletín. ~80 hallazgos; los marcados [verificado] se
-> confirmaron ejecutando el código. Si quieres, ataco cualquiera en orden de severidad.
+> Los marcados [verificado] en las secciones de arriba se confirmaron ejecutando el código.
 
 ## 🐞 Segunda pasada de caza de bugs (2026-06-22)
 
 Tras la primera auditoría, una caza adicional enfocada en correctitud encontró 6 bugs nuevos
-(no estaban en el inventario original). 5 corregidos, 1 documentado:
+(no estaban en el inventario original). Los 6 corregidos:
 
 - **✅ B1/W9 — Streaming rompía bloques multilínea** (tabla/lista/blockquote se mostraban como `<p>`
   sueltos hasta terminar el stream). `stableSplit` commiteaba una línea en blanco que era la última.
@@ -227,8 +228,9 @@ Tras la primera auditoría, una caza adicional enfocada en correctitud encontró
 - **✅ B5 — `deleteVariant`** mostraba la variante equivocada al borrar una con índice < activa. {`ab4cefc`}
 - **✅ B6 — Turno con answer vacío tras tools** dejaba la cadena de tools colgante en disco; ahora se
   persiste un assistant de cierre (`usedTools`). {`aafab77`}
-- **✅ B4 — CORREGIDO: Find/Replace salta ocurrencias dentro de URLs** cuando el término
-  aparece dentro de una URL o sintaxis markdown (la cuenta de ocurrencias del webview = `<mark>`
-  visibles; la del host = ocurrencias en el source crudo; divergen si una ocurrencia del source no
-  produce un `<mark>` visible, p. ej. dentro de un `href`). `media/features/find.js:179-191` lo asume
-  explícitamente. Fix correcto: mapear offset source↔rendered (rediseño, no trivial). Diferido.
+- **✅ B4 — CORREGIDO: Find/Replace ya no salta ocurrencias dentro de URLs** ({commit `dda6e4d`}).
+  El término dentro de una URL/sintaxis markdown divergía: la cuenta del webview = `<mark>` visibles,
+  la del host = ocurrencias en el source crudo. `findReplace.ts` ahora calcula `hiddenRanges(src)`
+  (rangos de URL de links/imágenes + autolinks de Markdown) y **omite** las coincidencias del source
+  que caen dentro de un rango oculto, alineándose con lo que el webview resalta. Test de regresión
+  añadido. Era el "Known issue" de 1.6.0; cerrado en 1.6.1.

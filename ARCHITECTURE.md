@@ -68,12 +68,12 @@ graph TB
 ```mermaid
 graph LR
   subgraph entry["Entry / orchestration (each ≤500 LoC)"]
-    extension["extension.ts (440)<br/>activate · ChatEditorProvider"]
-    router["messageRouter.ts<br/>webview→host dispatch (~50 cases)"]
+    extension["extension.ts (419)<br/>activate · ChatEditorProvider"]
+    router["messageRouter.ts (+ sysprompt)<br/>webview→host dispatch (~50 cases)"]
     chatOps["chatOps.ts<br/>send/fork/regenerate/variants"]
     inference["inference.ts<br/>agentic loop"]
     attach["attachmentStore.ts<br/>.attach sidecar"]
-    misc["webviewHtml · systemPrompt · summary<br/>loadModels · ttsBackend · localModels"]
+    misc["webviewHtml · systemPrompt · summary · applyPatch<br/>loadModels · ttsBackend · localModels"]
   end
   subgraph chat["Chat document"]
     chatDocument["chatDocument.ts"]
@@ -81,6 +81,7 @@ graph LR
   subgraph prov["providers/ — LLM strategy"]
     types["types.ts (interfaces)"]
     index["index.ts (factory)"]
+    baseurl["baseUrl.ts (URL validation)"]
     openai["openai.ts (+ OpenRouter)"]
     gemini["gemini.ts"]
     anthropic["anthropic.ts"]
@@ -119,7 +120,7 @@ graph LR
   extension --> router --> chatOps --> inference
   extension --> chatDocument
   inference --> index --> openai & gemini & anthropic & ollamaP
-  index --> types
+  index --> types & baseurl
   inference --> toolsTs --> mcp
   chatOps --> attach
   extension --> omanager & odl & ocat
@@ -355,10 +356,14 @@ graph LR
 
 ## 10. Security
 
-- **Workspace Trust** is the gate for code execution: MCP servers and `fs_write` are disabled
-  in untrusted workspaces (`untrustedWorkspaces: limited`). Enabling **Tools** in an untrusted
-  workspace nudges the user (warning + **Manage Trust** → `workbench.trust.manage`) up front, so
-  tools don't fail mid-turn — trust itself is still granted only through VS Code's own UI.
+- **Workspace Trust** is the gate for code execution: MCP servers, `fs_write`, and the Piper
+  **system-Python fallback** (a `python`/`py` resolved via `PATH`) are disabled in untrusted
+  workspaces (`untrustedWorkspaces: limited`). Enabling **Tools** in an untrusted workspace nudges
+  the user (warning + **Manage Trust** → `workbench.trust.manage`) up front, so tools don't fail
+  mid-turn — trust itself is still granted only through VS Code's own UI.
+- **Backend URL validation**: every configured `baseUrl` passes through `providers/baseUrl.ts`
+  before use — malformed URLs and non-`http(s)` schemes are rejected, and attaching an **API key
+  over plaintext `http` to a non-loopback host is refused** (the key would travel in cleartext).
 - **Path confinement**: filesystem tools resolve and `realpath`-check every path against the
   workspace roots (blocks `../` and symlink escape).
 - **API keys** live in **SecretStorage** (encrypted), entered via a masked input command, not
@@ -370,14 +375,18 @@ graph LR
 - **Webview CSP**: scripts are **nonce-locked** (`script-src 'nonce-…' 'strict-dynamic'`, no
   inline/eval). `'strict-dynamic'` lets the nonce'd module entry (`app/main.js`) statically
   import the rest of the graph (imports carry no nonce); the lazily-loaded Mermaid bundle is
-  injected with that nonce. `style-src` allows `'unsafe-inline'` only because Mermaid embeds a
-  `<style>` in its SVG; diagrams render with `securityLevel: 'strict'`.
+  injected with that nonce. `style-src` keeps `'unsafe-inline'` **only** for Mermaid's generated SVG
+  (per-node `style=` attributes a nonce/hash can't cover) — the extension's own DOM no longer relies
+  on it (the one inline-style use, the download bar, sets its width via the CSSOM). Diagrams render
+  with `securityLevel: 'strict'`.
 
 ---
 
 ## 11. Build & packaging
 
-- TypeScript (`src/**` → `out/**`) via `tsc`; ESLint; tests via `node:test` (`src/test/`).
+- TypeScript (`src/**` → `out/**`) via `tsc`; ESLint; tests via `node:test` (`src/test/`). `src/`
+  carries **no `any`-as-a-type** — external JSON / VS Code boundaries use `unknown` with explicit
+  narrowing or a named `Raw*`/response interface, so a typo on a parsed shape is a compile error.
 - Webview assets (`media/**`) ship as-is — the chat UI is hand-authored **ES modules** served
   via `asWebviewUri` (no bundler). They are type-checked (not emitted) by `media/jsconfig.json`
   (`checkJs` + `globals.d.ts`); run `npx tsc -p media/jsconfig.json` to validate the graph.

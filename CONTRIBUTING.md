@@ -29,6 +29,11 @@ npm test                  # compile + node:test suite
 For `package.json`: keep the `%nls%` placeholders in sync with `package.nls*.json`, and ensure
 every menu command is declared in `contributes.commands`.
 
+> **Typing convention:** `src/` is `any`-free. At a real boundary (a `JSON.parse` of external/file
+> input, a VS Code command argument, an LLM API response) type the value as `unknown` and narrow it,
+> or give it a named interface (`Raw*` for parsed `.chat` data, a per-provider response shape) — not
+> `any`. Outbound objects the code *builds* must be fully typed.
+
 ## Adding a backend (provider)
 
 Every backend implements one interface (`src/providers/types.ts`) and is wired through a small
@@ -51,7 +56,9 @@ factory. To add a provider `foo`:
 
 2. **`src/providers/index.ts`** — register it:
    - add `'foo'` to **`PROVIDER_IDS`** (this drives `ProviderId` + `isProviderId`);
-   - add a branch in **`buildProvider()`** (construct with the base URL + `resolveApiKey('foo')`);
+   - add a branch in **`buildProvider()`**: wrap the configured base URL in
+     **`validateBaseUrl(url, { hasKey })`** (rejects malformed/non-`http(s)` URLs and an API key over
+     plaintext `http`) and construct with `resolveApiKey('foo')`;
    - add a branch in **`providerInfo()`** (`label`, `endpoint`, `needsKey`, `hasKey`).
 
 3. **`src/extension.ts`** — if it needs an API key, add `{ id: 'foo', label: 'Foo' }` to

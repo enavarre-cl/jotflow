@@ -5,6 +5,40 @@ All notable changes to Parley. Format based on
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-06-22
+
+Second audit pass: the remaining `AUDIT.md` items closed (now **74 fixed / 0 open**). Mostly type
+safety and security hardening — no behavior change for the user.
+
+### Security
+- Validate the configured backend `baseUrl` before use: reject malformed URLs and non-`http(s)`
+  schemes (`file:`/`data:`/`javascript:`), and **refuse to send an API key over plaintext `http` to a
+  non-loopback host** (P11). ([`f23152e`](https://github.com/enavarre-cl/parley/commit/f23152e))
+- Gate the Piper system-Python fallback (`python3`/`py`/`python` resolved via `PATH`) behind
+  **Workspace Trust** — same posture as the filesystem tools and MCP servers (L7). The SHA-pinned
+  standalone Python is tried first and is unaffected. ([`2f4b1ae`](https://github.com/enavarre-cl/parley/commit/2f4b1ae))
+- CSP: the extension's own DOM no longer relies on `style-src 'unsafe-inline'` (the download progress
+  bar sets its width via the CSSOM); it is now attributable **only** to Mermaid's generated SVG, with
+  the bounded residual documented (H9). ([`9c11653`](https://github.com/enavarre-cl/parley/commit/9c11653))
+
+### Internal
+- **Type safety: every `any`-as-a-type removed from `src/` (182 → 0).** Real interfaces and generics
+  instead of `any` — `JsonRpcRequest/Response` + `request<T>()` (MCP), a `Raw*` family for `.chat`
+  parsing, per-provider response/stream shapes, `WebviewMessage`/`ModelsPanelMessage`, `ChatPatch`,
+  `ModelCard`, `ModelsTreeItem`, `TokenUsage`/`ChatResult`/`Attachment`, and typed `fetch`/`dns`/
+  `undici` signatures. `unknown`+narrowing is used **only** at true JSON/VS Code boundaries (X1).
+  ([`d39586b`](https://github.com/enavarre-cl/parley/commit/d39586b), [`6a3b5ca`](https://github.com/enavarre-cl/parley/commit/6a3b5ca), [`a7a6b01`](https://github.com/enavarre-cl/parley/commit/a7a6b01), [`eb2c2f5`](https://github.com/enavarre-cl/parley/commit/eb2c2f5), [`0dc39d4`](https://github.com/enavarre-cl/parley/commit/0dc39d4), [`b0015c7`](https://github.com/enavarre-cl/parley/commit/b0015c7), [`91495a1`](https://github.com/enavarre-cl/parley/commit/91495a1), [`e0cf976`](https://github.com/enavarre-cl/parley/commit/e0cf976))
+- Replace the `activeApply` global (state smell) with a focus-ordered registry of open chat editors,
+  so the models view's "use this model" targets the focused editor — or the most-recently-focused
+  still-open one when a chat opened on top of another is closed (H3). ([`ac930ca`](https://github.com/enavarre-cl/parley/commit/ac930ca))
+- Remove leftover local files (`.webview-backup/`, `plan-*.md`) and the stale `.gitignore` line (X4).
+  ([`8bf18c2`](https://github.com/enavarre-cl/parley/commit/8bf18c2))
+
+### Fixed
+- Find & Replace no longer replaces the wrong occurrence when the term appears inside a Markdown
+  link/URL or autolink: the host now skips source matches that fall inside hidden link/image URL
+  ranges, matching what the webview highlights (B4, the 1.6.0 known issue). ([`dda6e4d`](https://github.com/enavarre-cl/parley/commit/dda6e4d))
+
 ## [1.6.0] - 2026-06-22
 
 Security + reliability pass from a full code audit (([`bd6a71d`](https://github.com/enavarre-cl/parley/commit/bd6a71d)) inventory). 55 findings fixed
@@ -66,6 +100,7 @@ across 39 commits; see `AUDIT.md` for per-finding detail and `BEST-PRACTICES.md`
 - Find & Replace can replace the wrong occurrence when the search term appears inside a URL or
   Markdown syntax (the webview counts visible matches, the host counts raw-source occurrences; they
   diverge when a source occurrence renders no visible mark). Tracked in `AUDIT.md` (B4).
+  **→ Resolved in 1.6.1.**
 
 ### Added
 - `BEST-PRACTICES.md` (dev standard) and `AUDIT.md` (full audit). ([`99ce763`](https://github.com/enavarre-cl/parley/commit/99ce763))
