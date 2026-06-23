@@ -144,25 +144,31 @@ export async function routeMessage(msg: any, ctx: RouterCtx): Promise<void> {
           break;
         case 'setConfig': {
           if (ctx.busyRef.value) break; // do not mutate the doc while an inference is writing
-          const doc = ctx.getDoc();
-          if (!doc) break;
-          const before = doc.provider;
-          const toolsBefore = doc.params.tools;
-          ctx.applyPatch(doc, msg.patch);
-          await ctx.writeDoc(doc);
-          if (doc.provider !== before) await ctx.loadModels();
-          // Tools just turned ON in an untrusted workspace: nudge the user to grant Workspace Trust
-          // now (up front) so filesystem tools / MCP servers won't fail mid-turn. `requestWorkspaceTrust`
-          // is a proposed (non-publishable) API, so we surface a notice + open the Trust editor instead.
-          // Only on the off→on edge, so it never nags on unrelated config changes.
-          if (doc.params.tools && !toolsBefore && !vscode.workspace.isTrusted) {
-            const manage = tr('Manage Trust');
-            const pick = await vscode.window.showWarningMessage(
-              tr('Parley tools (workspace files + MCP servers) need a trusted workspace to run.'),
-              manage,
-            );
-            if (pick === manage) await vscode.commands.executeCommand('workbench.trust.manage');
-          }
+          // Acquire the lock for the whole handler: it awaits writeDoc, loadModels and (on the
+          // tools-on edge) a Trust dialog that can sit open for seconds — without holding busyRef a
+          // concurrent `send` could start an inference that writes the doc underneath us.
+          ctx.busyRef.value = true;
+          try {
+            const doc = ctx.getDoc();
+            if (doc) {
+              const before = doc.provider;
+              const toolsBefore = doc.params.tools;
+              ctx.applyPatch(doc, msg.patch);
+              await ctx.writeDoc(doc);
+              if (doc.provider !== before) await ctx.loadModels();
+              // Tools just turned ON in an untrusted workspace: nudge the user to grant Workspace Trust
+              // now (up front) so filesystem tools / MCP servers won't fail mid-turn. Only on the
+              // off→on edge, so it never nags on unrelated config changes.
+              if (doc.params.tools && !toolsBefore && !vscode.workspace.isTrusted) {
+                const manage = tr('Manage Trust');
+                const pick = await vscode.window.showWarningMessage(
+                  tr('Parley tools (workspace files + MCP servers) need a trusted workspace to run.'),
+                  manage,
+                );
+                if (pick === manage) await vscode.commands.executeCommand('workbench.trust.manage');
+              }
+            }
+          } finally { ctx.busyRef.value = false; }
           break;
         }
         case 'deleteMessage': {
