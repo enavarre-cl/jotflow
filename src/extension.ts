@@ -70,8 +70,11 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
   void loadApiKeys(context); // populate overrides from SecretStorage on startup
-  // If secrets change (another window, or the command), reload.
-  context.secrets.onDidChange((e) => { if (e.key.startsWith('parley.') && e.key.endsWith('.apiKey')) void loadApiKeys(context); });
+  // If secrets change (another window, or the command), reload. Registered as a disposable so it is
+  // cleaned up on deactivate (the sibling onDidChangeConfiguration above already is).
+  context.subscriptions.push(
+    context.secrets.onDidChange((e) => { if (e.key.startsWith('parley.') && e.key.endsWith('.apiKey')) void loadApiKeys(context); })
+  );
 
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(ChatEditorProvider.viewType, provider, {
