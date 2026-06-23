@@ -24,6 +24,18 @@ function llamaCrashHint(detail: string): string {
     : '';
 }
 
+// ── Shapes of the Ollama REST/NDJSON responses we read (only the fields we use). ────────────────
+interface OllamaTagModel { name?: string }
+interface OllamaTagsResponse { models?: OllamaTagModel[] }
+interface OllamaStreamMessage {
+  thinking?: string; content?: string;
+  tool_calls?: { function?: { name?: string; arguments?: unknown } }[];
+}
+interface OllamaStreamChunk {
+  error?: unknown; done?: boolean; prompt_eval_count?: number; eval_count?: number;
+  message?: OllamaStreamMessage;
+}
+
 /**
  * Provider for the Ollama server (native /api/chat API, NDJSON streaming).
  */
@@ -41,11 +53,11 @@ export class OllamaProvider implements LLMProvider {
     if (!res.ok) {
       throw new Error(`Could not list Ollama models (${res.status} ${res.statusText})`);
     }
-    const json: any = await res.json();
+    const json = await res.json() as OllamaTagsResponse;
     const models = Array.isArray(json?.models) ? json.models : [];
     return models
-      .filter((m: any) => typeof m?.name === 'string')
-      .map((m: any) => ({ id: m.name }));
+      .filter((m) => typeof m?.name === 'string')
+      .map((m) => ({ id: m.name as string }));
   }
 
   async chat(
@@ -114,7 +126,7 @@ export class OllamaProvider implements LLMProvider {
 
     await readLines(reader, (line) => {
       if (!line) return;
-      let obj: any;
+      let obj: OllamaStreamChunk;
       try {
         obj = JSON.parse(line);
       } catch {
@@ -144,7 +156,7 @@ export class OllamaProvider implements LLMProvider {
           const fn = tc.function ?? {};
           toolCalls.push({
             id: `call_${fn.name}_${toolCalls.length}`,
-            name: fn.name,
+            name: fn.name ?? '',
             arguments: typeof fn.arguments === 'string' ? safeToolArgs(fn.arguments) : JSON.stringify(fn.arguments ?? {}),
           });
         }

@@ -5,6 +5,19 @@ import { httpFetch } from '../http';
 import { readLines, safeToolArgs } from './stream';
 import { imageAttachments, documentAttachments } from './multimodal';
 
+// ── Shapes of the Anthropic REST/SSE responses we read (only the fields we use). ────────────────
+interface AnthropicModel { id?: string }
+interface AnthropicModelsResponse { data?: AnthropicModel[] }
+interface AnthropicEvent {
+  type?: string;
+  error?: { message?: string };
+  message?: { usage?: { input_tokens?: number; output_tokens?: number } };
+  usage?: { output_tokens?: number };
+  index?: number;
+  content_block?: { type?: string; id?: string; name?: string };
+  delta?: { type?: string; text?: string; thinking?: string; partial_json?: string };
+}
+
 /**
  * Provider for the Anthropic Messages API (Claude).
  * SSE streaming; supports extended thinking (reasoning panel).
@@ -35,9 +48,9 @@ export class AnthropicProvider implements LLMProvider {
       const detail = await res.text().catch(() => '');
       throw new Error(formatHttpError('Anthropic', res.status, res.statusText, detail));
     }
-    const json: any = await res.json();
+    const json = await res.json() as AnthropicModelsResponse;
     const data = Array.isArray(json?.data) ? json.data : [];
-    return data.filter((m: any) => typeof m?.id === 'string').map((m: any) => ({ id: m.id }));
+    return data.filter((m) => typeof m?.id === 'string').map((m) => ({ id: m.id as string }));
   }
 
   async chat(
@@ -135,7 +148,7 @@ export class AnthropicProvider implements LLMProvider {
       if (!line.startsWith('data:')) return;
       const payload = line.slice(5).trim();
       if (!payload) return;
-      let evt: any;
+      let evt: AnthropicEvent;
       try {
         evt = JSON.parse(payload);
       } catch {
@@ -150,8 +163,9 @@ export class AnthropicProvider implements LLMProvider {
       } else if (evt?.type === 'message_delta' && evt.usage) {
         outTok = evt.usage.output_tokens || outTok;
       }
+      const idx = evt.index ?? 0;
       if (evt?.type === 'content_block_start' && evt.content_block?.type === 'tool_use') {
-        blocks[evt.index] = { id: evt.content_block.id, name: evt.content_block.name, json: '' };
+        blocks[idx] = { id: evt.content_block.id ?? '', name: evt.content_block.name ?? '', json: '' };
       } else if (evt?.type === 'content_block_delta') {
         const d = evt.delta ?? {};
         if (d.type === 'text_delta' && d.text) {
@@ -160,8 +174,8 @@ export class AnthropicProvider implements LLMProvider {
         } else if (d.type === 'thinking_delta' && d.thinking) {
           thinking += d.thinking;
           cb.onReasoning?.(d.thinking);
-        } else if (d.type === 'input_json_delta' && blocks[evt.index]) {
-          blocks[evt.index].json += d.partial_json ?? '';
+        } else if (d.type === 'input_json_delta' && blocks[idx]) {
+          blocks[idx].json += d.partial_json ?? '';
         }
       }
     }, cb.signal);

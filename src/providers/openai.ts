@@ -36,6 +36,26 @@ function openAIMessage(m: ChatMessage): Record<string, unknown> {
   return msg;
 }
 
+// ── Shapes of the OpenAI-compatible REST/SSE responses we read (only the fields we use). ────────
+interface OpenAIArchitecture { input_modalities?: string[]; modality?: string }
+interface OpenAIModel {
+  id?: string; architecture?: OpenAIArchitecture; supported_parameters?: string[];
+  context_length?: number; max_context_length?: number;
+}
+interface OpenAIModelsResponse { data?: OpenAIModel[] }
+interface OpenAIImagePart { image_url?: { url?: string }; url?: string }
+interface OpenAIToolCallDelta { index?: number; id?: string; function?: { name?: string; arguments?: string } }
+interface OpenAIDelta {
+  content?: string; reasoning_content?: string; reasoning?: string;
+  reasoning_details?: { text?: string; summary?: string }[];
+  images?: OpenAIImagePart[]; tool_calls?: OpenAIToolCallDelta[];
+}
+interface OpenAIStreamChunk {
+  error?: { message?: string; metadata?: { raw?: unknown; provider_name?: string }; code?: string };
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; cost?: number };
+  choices?: { delta?: OpenAIDelta; message?: { images?: OpenAIImagePart[] } }[];
+}
+
 /**
  * Provider for OpenAI-API-compatible endpoints
  * (LM Studio, llama.cpp server, vLLM, LocalAI, etc.).
@@ -69,18 +89,18 @@ export class OpenAIProvider implements LLMProvider {
     if (!res.ok) {
       throw new Error(`Could not list models (${res.status} ${res.statusText})`);
     }
-    const json: any = await res.json();
+    const json = await res.json() as OpenAIModelsResponse;
     const data = Array.isArray(json?.data) ? json.data : [];
     return data
-      .filter((m: any) => typeof m?.id === 'string')
-      .map((m: any) => {
+      .filter((m) => typeof m?.id === 'string')
+      .map((m) => {
         const arch = m.architecture ?? {};
         const inputs: string[] = Array.isArray(arch.input_modalities) ? arch.input_modalities : [];
         const modality: string = typeof arch.modality === 'string' ? arch.modality : '';
         const params: string[] = Array.isArray(m.supported_parameters) ? m.supported_parameters : [];
         const hasIn = (k: string) => inputs.includes(k) || modality.includes(k);
         return {
-          id: m.id,
+          id: m.id as string, // guaranteed by the typeof m?.id === 'string' filter above
           // OpenRouter exposes context_length; LM Studio sometimes max_context_length.
           contextLength: typeof m.context_length === 'number' ? m.context_length
             : typeof m.max_context_length === 'number' ? m.max_context_length
@@ -150,7 +170,7 @@ export class OpenAIProvider implements LLMProvider {
     let usage: TokenUsage | undefined;
     const images: GenImage[] = [];
     const imageSeen = new Set<string>(); // dedup (a frame may repeat in delta + final message)
-    const collectImages = (arr: any): void => {
+    const collectImages = (arr: OpenAIImagePart[] | undefined): void => {
       if (!Array.isArray(arr)) return;
       for (const im of arr) {
         const parsed = parseDataUrl(im?.image_url?.url ?? im?.url ?? '');
@@ -166,7 +186,7 @@ export class OpenAIProvider implements LLMProvider {
       if (!line.startsWith('data:')) return;
       const payload = line.slice(5).trim();
       if (payload === '[DONE]') return;
-      let json: any;
+      let json: OpenAIStreamChunk;
       try {
         json = JSON.parse(payload);
       } catch {
@@ -203,7 +223,7 @@ export class OpenAIProvider implements LLMProvider {
       // reasoning.summary → summary (reasoning.encrypted has no readable text → skipped).
       let reasoning: string = delta.reasoning_content ?? delta.reasoning ?? '';
       if (!reasoning && Array.isArray(delta.reasoning_details)) {
-        reasoning = delta.reasoning_details.map((d: any) => d?.text ?? d?.summary ?? '').join('');
+        reasoning = delta.reasoning_details.map((d) => d?.text ?? d?.summary ?? '').join('');
       }
       if (reasoning) {
         thinking += reasoning;

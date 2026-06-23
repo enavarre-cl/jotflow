@@ -4,6 +4,21 @@ import { httpFetch } from '../http';
 import { readLines } from './stream';
 import { imageAttachments, documentAttachments, isImageOutputModel } from './multimodal';
 
+// ── Shapes of the Gemini REST/SSE responses we read (only the fields we use). ──────────────────
+interface GeminiModel { name?: string; supportedGenerationMethods?: string[]; inputTokenLimit?: number }
+interface GeminiModelsResponse { models?: GeminiModel[] }
+interface GeminiInlineData { data?: string; mimeType?: string; mime_type?: string }
+interface GeminiPart {
+  text?: string; thought?: boolean;
+  functionCall?: { name?: string; args?: unknown };
+  inlineData?: GeminiInlineData; inline_data?: GeminiInlineData;
+}
+interface GeminiStreamChunk {
+  error?: { message?: string };
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number; totalTokenCount?: number };
+  candidates?: { content?: { parts?: GeminiPart[] } }[];
+}
+
 /**
  * Provider for the Google Gemini API (Generative Language API).
  * Streaming via streamGenerateContent?alt=sse.
@@ -31,12 +46,12 @@ export class GeminiProvider implements LLMProvider {
     if (!res.ok) {
       throw new Error(`Could not list Gemini models (${res.status} ${res.statusText})`);
     }
-    const json: any = await res.json();
+    const json = await res.json() as GeminiModelsResponse;
     const models = Array.isArray(json?.models) ? json.models : [];
     return models
-      .filter((m: any) => Array.isArray(m.supportedGenerationMethods)
+      .filter((m) => Array.isArray(m.supportedGenerationMethods)
         && m.supportedGenerationMethods.includes('generateContent'))
-      .map((m: any) => ({
+      .map((m) => ({
         id: String(m.name).replace(/^models\//, ''),
         contextLength: typeof m.inputTokenLimit === 'number' ? m.inputTokenLimit : undefined,
       }))
@@ -78,7 +93,7 @@ export class GeminiProvider implements LLMProvider {
         const parts: Record<string, unknown>[] = [];
         if (m.content) parts.push({ text: m.content });
         for (const tc of m.toolCalls) {
-          let args: any = {};
+          let args: unknown = {};
           try { args = JSON.parse(tc.arguments || '{}'); } catch { /* empty */ }
           parts.push({ functionCall: { name: tc.name, args } });
         }
@@ -102,7 +117,7 @@ export class GeminiProvider implements LLMProvider {
     // tools/thinking, which they don't support.
     const imageOut = isImageOutputModel(model);
 
-    const generationConfig: any = {};
+    const generationConfig: Record<string, unknown> = {};
     if (p.temperature !== undefined) generationConfig.temperature = p.temperature;
     if (p.maxTokens !== undefined && p.maxTokens > 0) generationConfig.maxOutputTokens = p.maxTokens;
     if (p.topP !== undefined) generationConfig.topP = p.topP;
@@ -145,7 +160,7 @@ export class GeminiProvider implements LLMProvider {
       if (!line.startsWith('data:')) return;
       const payload = line.slice(5).trim();
       if (!payload || payload === '[DONE]') return;
-      let json: any;
+      let json: GeminiStreamChunk;
       try {
         json = JSON.parse(payload);
       } catch {
@@ -171,7 +186,7 @@ export class GeminiProvider implements LLMProvider {
         } else if (part?.functionCall) {
           toolCalls.push({
             id: `call_${part.functionCall.name}_${toolCalls.length}`,
-            name: part.functionCall.name,
+            name: part.functionCall.name ?? '',
             arguments: JSON.stringify(part.functionCall.args ?? {}),
           });
         } else if (typeof part?.text === 'string') {
@@ -195,10 +210,10 @@ export class GeminiProvider implements LLMProvider {
 }
 
 /** Strips a JSON Schema for Gemini (does not accept $schema, additionalProperties, etc.). */
-function sanitizeSchema(schema: any): any {
+function sanitizeSchema(schema: unknown): unknown {
   if (Array.isArray(schema)) return schema.map(sanitizeSchema);
   if (!schema || typeof schema !== 'object') return schema;
-  const out: any = {};
+  const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(schema)) {
     if (k === '$schema' || k === 'additionalProperties' || k === 'title' || k === 'default') continue;
     out[k] = sanitizeSchema(v);
