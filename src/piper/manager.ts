@@ -157,6 +157,13 @@ export class PiperManager {
     try {
       py = await this.ensureStandalonePython(notify);
     } catch (e) {
+      // Fallback to a Python resolved via PATH (python3/py/python). Spawning a PATH-resolved
+      // interpreter is command execution, so gate it behind Workspace Trust — same posture as the
+      // filesystem tools and MCP servers (L7). The SHA-pinned standalone above is always tried first
+      // and is unaffected; this only blocks the fallback in an untrusted workspace.
+      if (!vscode.workspace.isTrusted) {
+        throw new Error(tr('Could not set up the bundled Python and the system-Python fallback is disabled in an untrusted workspace. Trust this workspace (Workspace Trust) to enable Piper TTS.'));
+      }
       const sys = this.findCompatiblePython();
       if (!sys) throw e;
       py = sys;
