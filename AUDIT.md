@@ -206,3 +206,22 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 
 > Esto es una lista de trabajo, no un boletín. ~80 hallazgos; los marcados [verificado] se
 > confirmaron ejecutando el código. Si quieres, ataco cualquiera en orden de severidad.
+
+## 🐞 Segunda pasada de caza de bugs (2026-06-22)
+
+Tras la primera auditoría, una caza adicional enfocada en correctitud encontró 6 bugs nuevos
+(no estaban en el inventario original). 5 corregidos, 1 documentado:
+
+- **✅ B1/W9 — Streaming rompía bloques multilínea** (tabla/lista/blockquote se mostraban como `<p>`
+  sueltos hasta terminar el stream). `stableSplit` commiteaba una línea en blanco que era la última.
+  Fix: solo es boundary si hay línea después. {commit `fbd617f`}
+- **✅ B2 — Negrita con `*` interno** (`**2 * 3 = 6**`) se corrompía. `[^*]+` → `[\s\S]+?`. {`82faf65`}
+- **✅ B3 — Celdas de tabla** partían en `\|` escapado o `|` dentro de code-span. `splitRow` tokeniza. {`82faf65`}
+- **✅ B5 — `deleteVariant`** mostraba la variante equivocada al borrar una con índice < activa. {`ab4cefc`}
+- **✅ B6 — Turno con answer vacío tras tools** dejaba la cadena de tools colgante en disco; ahora se
+  persiste un assistant de cierre (`usedTools`). {`aafab77`}
+- **⬜ B4 — KNOWN ISSUE: Find/Replace puede reemplazar la ocurrencia equivocada** cuando el término
+  aparece dentro de una URL o sintaxis markdown (la cuenta de ocurrencias del webview = `<mark>`
+  visibles; la del host = ocurrencias en el source crudo; divergen si una ocurrencia del source no
+  produce un `<mark>` visible, p. ej. dentro de un `href`). `media/features/find.js:179-191` lo asume
+  explícitamente. Fix correcto: mapear offset source↔rendered (rediseño, no trivial). Diferido.
