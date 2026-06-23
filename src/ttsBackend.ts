@@ -17,7 +17,7 @@ export interface TtsBackendDeps {
 /** Piper TTS synthesis backend (daemon + per-chunk spawn). Cohesive; deps explicit. */
 export function makeTtsBackend(deps: TtsBackendDeps) {
   const { webview, piper, ttsTokenRef } = deps;
-    let currentPiperProc: any = null; // piper process in flight, so we can kill it on cancel
+    let currentPiperProc: cp.ChildProcess | null = null; // piper process in flight, so we can kill it on cancel
     const killPiper = () => { if (currentPiperProc) { try { currentPiperProc.kill(); } catch { /* nothing */ } currentPiperProc = null; } };
     // TTS trace to file (for debugging without relying on the webview console).
     const tlog = (s: string) => {
@@ -34,7 +34,7 @@ export function makeTtsBackend(deps: TtsBackendDeps) {
       killPiper(); // kill any piper from a previous request still in flight
       tlog(`req#${reqId} received (engine=piper, rate=${rate}, voice=${voice || '(setting)'})`);
       // All TTS messages carry the request id so the webview can filter stale ones.
-      const post = (m: any) => webview.postMessage({ ...m, id: reqId });
+      const post = (m: Record<string, unknown>) => webview.postMessage({ ...m, id: reqId });
       const notice = (m: string) => webview.postMessage({ type: 'notice', message: m });
       const cfg = vscode.workspace.getConfiguration('parley');
       const speaker = cfg.get<number>('tts.piperSpeaker', -1);
@@ -85,7 +85,7 @@ export function makeTtsBackend(deps: TtsBackendDeps) {
 
       const lengthScale = rate > 0 ? (1 / rate).toFixed(3) : '1';
       const libDir = path.dirname(bin);
-      const env: any = { ...process.env };
+      const env: NodeJS.ProcessEnv = { ...process.env };
       if (process.platform === 'darwin') {
         env.DYLD_LIBRARY_PATH = libDir + (env.DYLD_LIBRARY_PATH ? ':' + env.DYLD_LIBRARY_PATH : '');
       } else if (process.platform === 'linux') {
@@ -98,7 +98,7 @@ export function makeTtsBackend(deps: TtsBackendDeps) {
           const out = path.join(os.tmpdir(), `parley-tts-${Date.now()}-${Math.floor(Math.random() * 1e6)}.wav`);
           const args = ['--model', model, '--output_file', out, '--length_scale', lengthScale];
           if (typeof speaker === 'number' && speaker >= 0) args.push('--speaker', String(speaker));
-          let proc: any;
+          let proc: cp.ChildProcess;
           try {
             proc = cp.spawn(bin, args, { cwd: libDir, env });
           } catch (e) {
@@ -107,7 +107,7 @@ export function makeTtsBackend(deps: TtsBackendDeps) {
           currentPiperProc = proc; // so we can kill it if cancelled
           let stderr = '';
           proc.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
-          proc.on('error', (e: any) => {
+          proc.on('error', (e: Error) => {
             if (currentPiperProc === proc) currentPiperProc = null;
             try { fs.unlinkSync(out); } catch { /* not created / already deleted */ }
             resolve({ ok: false, err: errMsg(e) });

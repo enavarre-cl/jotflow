@@ -6,10 +6,10 @@ import { ChatMessage, ChatVariant } from '../providers/types';
 test('addUsage sums fields and keeps cost only when non-zero', () => {
   assert.deepEqual(addUsage(undefined, { promptTokens: 1, completionTokens: 2, totalTokens: 3 }),
     { promptTokens: 1, completionTokens: 2, totalTokens: 3 });
-  assert.equal(addUsage({ promptTokens: 5 }, undefined).promptTokens, 5);
-  const s = addUsage({ promptTokens: 1, totalTokens: 1, cost: 0.5 }, { promptTokens: 2, totalTokens: 2, cost: 0.25 });
+  assert.equal(addUsage({ promptTokens: 5 }, undefined)!.promptTokens, 5);
+  const s = addUsage({ promptTokens: 1, totalTokens: 1, cost: 0.5 }, { promptTokens: 2, totalTokens: 2, cost: 0.25 })!;
   assert.equal(s.promptTokens, 3); assert.equal(s.totalTokens, 3); assert.equal(s.cost, 0.75);
-  assert.equal('cost' in addUsage({ totalTokens: 1 }, { totalTokens: 1 }), false);
+  assert.equal('cost' in addUsage({ totalTokens: 1 }, { totalTokens: 1 })!, false);
 });
 
 test('estTokens ~ length/4, 0 for empty', () => {

@@ -3,13 +3,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { ChatDoc } from './chatDocument';
+import { Attachment } from './providers';
 
 /**
  * Persists attachment blobs in a `<chat>.attach` sidecar; the `.chat` keeps only `{kind,name,mime,ref}`.
  * Single dependency: the `.chat` document URI. Cohesive (all blob lifecycle), low coupling.
  */
 export class AttachmentStore {
-  private cache: Record<string, any> | null = null;
+  private cache: Record<string, Attachment> | null = null;
   private cacheMtime = -1;                 // mtimeMs the cache was loaded from; -1 = unknown/none
   private tmpSeq = 0;                       // makes each temp file name unique within this process
   private loadFailed = false;             // sidecar exists but couldn't be parsed → never clobber it
@@ -22,7 +23,7 @@ export class AttachmentStore {
     return vscode.Uri.joinPath(this.docUri, '..', stem + '.attach');
   }
 
-  load(): Record<string, any> {
+  load(): Record<string, Attachment> {
     const p = this.uri().fsPath;
     let mtime = -1;
     try { mtime = fs.statSync(p).mtimeMs; } catch { mtime = -1; }
@@ -51,7 +52,7 @@ export class AttachmentStore {
 
   // Atomic write (temp file + rename) so a concurrent reader never sees a half-written sidecar and
   // resets it to {} (which a later save/prune would then persist, losing every blob). Serialized.
-  private writeSidecar(store: Record<string, any>): Promise<void> {
+  private writeSidecar(store: Record<string, Attachment>): Promise<void> {
     const run = this.writeChain.then(async () => {
       const main = this.uri();
       // Per-process unique temp name: a fixed `.tmp` would collide if the same .chat is open in two
@@ -66,17 +67,17 @@ export class AttachmentStore {
     return run;
   }
 
-  private async save(store: Record<string, any>): Promise<void> {
+  private async save(store: Record<string, Attachment>): Promise<void> {
     this.cache = store;
     this.loadFailed = false; // we now hold an authoritative store
     await this.writeSidecar(store);
   }
 
   /** Saves new blobs and returns attachments with only {kind,name,mime,ref,bytes}. */
-  async store(atts: any[]): Promise<any[]> {
+  async store(atts: Attachment[]): Promise<Attachment[]> {
     if (!atts.length) return [];
     const store = this.load();
-    const refs: any[] = [];
+    const refs: Attachment[] = [];
     for (const a of atts) {
       const id = `att_${crypto.randomUUID()}`; // collision-free (Date.now()+random collided in a sync loop)
       const bytes = typeof a.data === 'string' ? a.data.length : 0;
@@ -88,7 +89,7 @@ export class AttachmentStore {
   }
 
   /** Stores images returned by an image-output model as image attachments. */
-  async storeGenImages(images: { mime: string; data: string }[]): Promise<any[]> {
+  async storeGenImages(images: { mime: string; data: string }[]): Promise<Attachment[]> {
     const ext = (mime: string) => (/jpeg|jpg/i.test(mime) ? 'jpg' : /webp/i.test(mime) ? 'webp' : /gif/i.test(mime) ? 'gif' : 'png');
     return this.store(images.map((im, i) => ({
       kind: 'image', name: `image-${i + 1}.${ext(im.mime)}`, mime: im.mime || 'image/png', data: im.data,
@@ -97,7 +98,7 @@ export class AttachmentStore {
 
   /** Returns an attachment with `data` resolved (from the sidecar if a ref, or legacy inline).
    *  Arrow property so it can be passed as `.map(store.resolve)` without losing `this`. */
-  resolve = (a: any): any => {
+  resolve = (a: Attachment): Attachment => {
     if (typeof a?.data === 'string') return a; // legacy inline
     if (a?.ref) {
       const e = this.load()[a.ref];

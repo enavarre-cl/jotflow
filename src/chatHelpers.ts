@@ -1,18 +1,18 @@
 /** Pure chat/message helpers (no VS Code dependency), extracted from extension.ts so the logic is
  *  small, reusable and unit-testable. Types come from providers/types (which imports nothing). */
 import * as crypto from 'crypto';
-import { ChatMessage, ChatVariant } from './providers/types';
+import { ChatMessage, ChatVariant, TokenUsage } from './providers/types';
 
-/** Adds two token-usage records together. */
-export function addUsage(a: any, b: any): any {
-  if (!b) return a;
-  if (!a) return { ...b };
-  const out: any = {
-    promptTokens: (a.promptTokens || 0) + (b.promptTokens || 0),
-    completionTokens: (a.completionTokens || 0) + (b.completionTokens || 0),
-    totalTokens: (a.totalTokens || 0) + (b.totalTokens || 0),
+// Inputs are Partial because a provider may omit a field (each is defaulted to 0); the merged
+// result is always a complete TokenUsage.
+export function addUsage(a: Partial<TokenUsage> | undefined, b: Partial<TokenUsage> | undefined): TokenUsage | undefined {
+  if (!a && !b) return undefined;
+  const out: TokenUsage = {
+    promptTokens: (a?.promptTokens || 0) + (b?.promptTokens || 0),
+    completionTokens: (a?.completionTokens || 0) + (b?.completionTokens || 0),
+    totalTokens: (a?.totalTokens || 0) + (b?.totalTokens || 0),
   };
-  const cost = (a.cost || 0) + (b.cost || 0);
+  const cost = (a?.cost || 0) + (b?.cost || 0);
   if (cost) out.cost = cost;
   return out;
 }

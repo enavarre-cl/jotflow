@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ChatMessage } from './providers/types';
+import { ChatMessage, ChatResult, TokenUsage, Attachment } from './providers/types';
 import { ChatDoc, repairTrailingToolChain, resolveGenerationParams } from './chatDocument';
 import { buildProvider } from './providers';
 import { ToolHub } from './tools';
@@ -13,7 +13,7 @@ export interface InferenceDeps {
   modelContexts: Record<string, number>;
   resolveSystemPrompt: (doc: ChatDoc) => string;
   ensureSummary: (doc: ChatDoc, history: ChatMessage[], upTo: number) => Promise<string>;
-  resolveAttachment: (a: any) => any;
+  resolveAttachment: (a: Attachment) => Attachment;
   getDoc: () => ChatDoc | null;
   writeDoc: (doc: ChatDoc, opts?: { save?: boolean; prune?: boolean }) => Promise<void>;
   sendHistory: () => void;
@@ -23,7 +23,7 @@ export interface InferenceDeps {
 /** Runs one chat turn: context trimming, the wire build, and the agentic tool loop. */
 export async function runInference(
   doc: ChatDoc, context: ChatMessage[], allowTools: boolean, deps: InferenceDeps
-): Promise<{ answer: string; thinking: string; failed: boolean; usage?: any; images: { mime: string; data: string }[]; usedTools: boolean }> {
+): Promise<{ answer: string; thinking: string; failed: boolean; usage?: TokenUsage; images: { mime: string; data: string }[]; usedTools: boolean }> {
   const { webview, toolHub, modelContexts, resolveSystemPrompt, ensureSummary, resolveAttachment, getDoc, writeDoc, sendHistory, abortRef } = deps;
       // Copy + drop any trailing unfinished tool exchange (crash/reload recovery) so we never replay
       // an assistant tool_call without its tool reply → provider 400. On a normal send this is a no-op.
@@ -132,7 +132,7 @@ export async function runInference(
       let thinking = '';
       let failed = false;
       let aborted = false;
-      let usage: any = undefined;
+      let usage: TokenUsage | undefined = undefined;
       let images: { mime: string; data: string }[] = [];
       let usedTools = false; // true once a tool call was persisted → the caller must close the chain
 
@@ -150,7 +150,7 @@ export async function runInference(
         if (ac.signal.aborted) { aborted = true; break; }
         const id = `m_${Date.now().toString(36)}_${iter}`;
         webview.postMessage({ type: 'streamStart', id });
-        let res: { answer: string; thinking: string; toolCalls?: any[]; usage?: any; images?: { mime: string; data: string }[] } = { answer: '', thinking: '' };
+        let res: ChatResult = { answer: '', thinking: '' };
         try {
           res = await buildProvider(doc.provider).chat(doc.model, wire, params, {
             signal: ac.signal,
@@ -182,7 +182,7 @@ export async function runInference(
         // seeing intermediate results, so they're independent and can't rely on intra-turn ordering.
         // Results are collected in request order to keep tool_result ↔ tool_call pairing intact.
         const toolResults = await Promise.all(res.toolCalls.map(async (tc): Promise<{ tc: typeof tc; out: string }> => {
-          let args: any = {};
+          let args: unknown = {};
           let parseError = false;
           try { args = JSON.parse(tc.arguments || '{}'); } catch { parseError = true; }
           webview.postMessage({ type: 'toolCall', name: tc.name, args: tc.arguments || '' });
