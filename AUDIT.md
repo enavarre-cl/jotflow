@@ -14,7 +14,7 @@
 
 ## 📋 Inventario completo (74 hallazgos: 67 auditoría + W8 + 6 de la 2.ª pasada)
 
-> **Estado: 72 ✅ corregidos · 2 🔎 revisados/por-diseño (H3, L7 — no son bugs) · 0 ⬜ abiertos.**
+> **Estado: 73 ✅ corregidos · 1 🔎 revisado/por-diseño (H3 — no es bug, olor de estado global F4) · 0 ⬜ abiertos.**
 > **Cerrados en esta tanda final:** P11 (validación baseUrl), P12 (request bodies tipados),
 > H9 (CSP acotada a Mermaid), **X1 (`any` 182→0 en todo `src/`)**, X4 (higiene de archivos).
 > ✅ = corregido y commiteado · 🔎 = revisado, no era bug / por diseño · ⬜ = abierto.
@@ -49,7 +49,7 @@
 
 **Motores locales**
 - ✅ L1 zombies tree-kill · ✅ L2 🟠 .onnx.json validado · ✅ L3 🟠 voz parcial revalidada · ✅ L4 🟡 importDir por subcarpeta de item
-- ✅ L5 🟡 piper startServer con on('error') · ✅ L6 🟡 abort listener removido · 🔎 L7 revisado: riesgo teórico (PATH no es del workspace) · ✅ L8 ⚪ synthViaServer con timeout
+- ✅ L5 🟡 piper startServer con on('error') · ✅ L6 🟡 abort listener removido · ✅ L7 🟡 fallback a Python del PATH gateado por Workspace Trust (`2f4b1ae`) · ✅ L8 ⚪ synthViaServer con timeout
 
 **i18n / CSS / transversal**
 - ✅ I1 🟡 claves UI traducidas (24×5) · ✅ I2 ⚪ Reset / center (americano) · ✅ I3 ⚪ 2 claves muertas eliminadas
@@ -169,7 +169,7 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 - **✅ [Media] BUG `ollama/downloads.ts:204` (L4) — CORREGIDO** — cada import descarga en un subdirectorio `importDir/<item.id>/`; dos descargas concurrentes con shards homónimos ya no se pisan. Se limpia la subcarpeta al terminar.
 - **✅ [Media] BUG `piper/manager.ts:328` (L5) — CORREGIDO** — `Promise.race([waitForServer, spawnErr])` con `proc.once('error')`: un spawn fallido (ENOENT) falla al instante en vez de esperar 20s.
 - **✅ [Media] BUG `download.ts:62` (L6) — CORREGIDO** — el listener `abort` se remueve en `req.on('close')` (ya no se acumulan sobre un signal compartido en redirects). (Residual menor: un `.part` de un SIGKILL del editor; `downloadFile` ya limpia en error/abort normal.)
-- **🔎 [reclasificado] `piper/manager.ts:154` (L7) — riesgo teórico** — VS Code NO añade el workspace al PATH, así que `python`/`py` es el del sistema (no controlado por el workspace); además se prefiere el Python standalone SHA-pinned. Gatearlo por trust degradaría TTS sin beneficio real. Sin cambio.
+- **✅ `piper/manager.ts` (L7) — CORREGIDO** (`2f4b1ae`) — el fallback a un Python resuelto vía PATH (`python3`/`py`/`python`) ahora requiere **Workspace Trust**, igual que las herramientas de filesystem y los servidores MCP: lanzar un intérprete del PATH es ejecución de comando y debe seguir la misma postura. El Python standalone SHA-pinned se intenta primero y no se ve afectado; solo se bloquea el fallback en un workspace no confiable, con mensaje claro que apunta a Workspace Trust.
 - **✅ [Baja] BUG `piper/manager.ts:407` (L8) — CORREGIDO** — `req.setTimeout(30s)` destruye el request si el daemon deja de responder; ya no cuelga la UI de TTS.
 
 **Verificado OK (motores):** los binarios de Ollama/Piper/Python **sí** se verifican por SHA256 pin con fail-closed; `downloadFile` usa `.part`+rename atómico y limpia en error/abort. El gap es la robustez del kill y las voces json sin hash, no la ausencia de verificación.
