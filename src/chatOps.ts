@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { ChatDoc, serializeDoc } from './chatDocument';
-import { ChatMessage } from './providers/types';
+import { ChatMessage, ChatVariant, TokenUsage, Attachment } from './providers/types';
 import { sanitizeAttachments, applyVariantToMessage, addUsage } from './chatHelpers';
 import { tr } from './i18n';
 import { AttachmentStore } from './attachmentStore';
@@ -12,14 +12,14 @@ export interface ChatOpsCtx {
   getDoc: () => ChatDoc | null;
   writeDoc: (doc: ChatDoc, opts?: { save?: boolean; prune?: boolean }) => Promise<void>;
   sendHistory: () => void;
-  runInference: (doc: ChatDoc, context: ChatMessage[], allowTools?: boolean) => Promise<{ answer: string; thinking: string; failed: boolean; usage?: any; images: { mime: string; data: string }[]; usedTools: boolean }>;
+  runInference: (doc: ChatDoc, context: ChatMessage[], allowTools?: boolean) => Promise<{ answer: string; thinking: string; failed: boolean; usage?: TokenUsage; images: { mime: string; data: string }[]; usedTools: boolean }>;
   attachStore: AttachmentStore;
   viewType: string;
 }
 
 /** Chat turn operations: send / generate / fork / continue / regenerate / variant ops. */
 export function makeChatOps(deps: ChatOpsCtx) {
-    const handleSend = async (text: string, attachments?: any[]): Promise<void> => {
+    const handleSend = async (text: string, attachments?: Attachment[]): Promise<void> => {
       text = (text ?? '').trim();
       const atts = sanitizeAttachments(attachments);
       if (!text && !atts.length) return;
@@ -130,7 +130,7 @@ export function makeChatOps(deps: ChatOpsCtx) {
       }
       if (refIds.size) {
         const src = deps.attachStore.load();
-        const dst: Record<string, any> = {};
+        const dst: Record<string, Attachment> = {};
         for (const id of refIds) if (src[id]) dst[id] = src[id];
         const forkStem = path.basename(target.fsPath).replace(/\.chat$/i, '');
         const forkAttach = vscode.Uri.joinPath(target, '..', forkStem + '.attach');
@@ -198,7 +198,7 @@ export function makeChatOps(deps: ChatOpsCtx) {
         // The original response becomes variant 0 (preserving its usage and any images).
         target.variants = [{ content: target.content, thinking: target.thinking, usage: target.usage, attachments: target.attachments }];
       }
-      const variant: any = { content: answer };
+      const variant: ChatVariant = { content: answer };
       if (thinking) variant.thinking = thinking;
       if (usage) variant.usage = usage;
       if (images.length) variant.attachments = await deps.attachStore.storeGenImages(images);

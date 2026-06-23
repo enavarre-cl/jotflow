@@ -113,7 +113,7 @@ function maxReadBytes(): number {
 }
 
 /** Native workspace filesystem tools (fs_ prefix). `signal` lets a long tool (web_fetch) be aborted. */
-const BUILTIN: { schema: ToolSchema; run: (args: any, signal?: AbortSignal) => Promise<string> }[] = [
+const BUILTIN: { schema: ToolSchema; run: (args: Record<string, unknown>, signal?: AbortSignal) => Promise<string> }[] = [
   {
     schema: {
       name: 'fs_list',
@@ -121,7 +121,7 @@ const BUILTIN: { schema: ToolSchema; run: (args: any, signal?: AbortSignal) => P
       parameters: { type: 'object', properties: { path: { type: 'string', description: 'Relative path (empty = root)' } } },
     },
     run: async (a) => {
-      const dir = resolveInWorkspace(a?.path ?? '.');
+      const dir = resolveInWorkspace(typeof a?.path === 'string' ? a.path : '.');
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       return entries.map((e) => (e.isDirectory() ? `📁 ${e.name}/` : `📄 ${e.name}`)).join('\n') || '(empty)';
     },
@@ -133,7 +133,7 @@ const BUILTIN: { schema: ToolSchema; run: (args: any, signal?: AbortSignal) => P
       parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
     },
     run: async (a) => {
-      const file = resolveInWorkspace(a?.path ?? '');
+      const file = resolveInWorkspace(String(a?.path ?? ''));
       const st = fs.statSync(file);
       if (st.isDirectory()) throw new Error('Path is a directory — use fs_list.');
       const limit = maxReadBytes();
@@ -167,7 +167,7 @@ const BUILTIN: { schema: ToolSchema; run: (args: any, signal?: AbortSignal) => P
     },
     run: async (a) => {
       if (!vscode.workspace.isTrusted) throw new Error('Writing disabled: the workspace is not trusted.');
-      const file = resolveInWorkspace(a?.path ?? '');
+      const file = resolveInWorkspace(String(a?.path ?? ''));
       assertWritable(file); // no .git/ .vscode/ .mcp.json .mcp/
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, String(a?.content ?? ''), 'utf8');
@@ -198,7 +198,7 @@ const BUILTIN: { schema: ToolSchema; run: (args: any, signal?: AbortSignal) => P
     },
     run: async (a) => {
       const root = workspaceRoot();
-      const uris = await vscode.workspace.findFiles(a?.pattern || '**/*', EXCLUDE, 500);
+      const uris = await vscode.workspace.findFiles(String(a?.pattern || '**/*'), EXCLUDE, 500);
       const list = uris.filter((u) => withinAnyFolder(u.fsPath)).map((u) => path.relative(root, u.fsPath)).sort();
       return list.length ? list.join('\n') : 'No files.';
     },
@@ -220,11 +220,11 @@ const BUILTIN: { schema: ToolSchema; run: (args: any, signal?: AbortSignal) => P
     },
     run: async (a) => {
       const root = workspaceRoot();
-      const max = Math.min(Math.max(1, a?.maxResults || 100), 500);
-      const uris = await vscode.workspace.findFiles(a?.glob || '**/*', EXCLUDE, 3000);
+      const max = Math.min(Math.max(1, Number(a?.maxResults) || 100), 500);
+      const uris = await vscode.workspace.findFiles(String(a?.glob || '**/*'), EXCLUDE, 3000);
       let re: RegExp | null = null;
       if (a?.regex) {
-        try { re = new RegExp(a.query, 'i'); } catch (e) { return 'Invalid regex: ' + errMsg(e); }
+        try { re = new RegExp(String(a?.query ?? ''), 'i'); } catch (e) { return 'Invalid regex: ' + errMsg(e); }
       }
       const needle = String(a?.query ?? '').toLowerCase();
       const matches: string[] = [];
@@ -316,7 +316,7 @@ const BUILTIN: { schema: ToolSchema; run: (args: any, signal?: AbortSignal) => P
       const tabs: string[] = [];
       for (const g of vscode.window.tabGroups.all) {
         for (const t of g.tabs) {
-          const uri = (t.input as any)?.uri as vscode.Uri | undefined;
+          const uri = (t.input as { uri?: vscode.Uri } | undefined)?.uri;
           if (uri) tabs.push(rel(uri) + (t.isActive ? ' (active tab)' : ''));
         }
       }
@@ -351,7 +351,7 @@ export class ToolHub {
     return [...BUILTIN.map((b) => b.schema), ...this.mcp.toolSchemas()];
   }
 
-  async call(name: string, args: any, signal?: AbortSignal): Promise<string> {
+  async call(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
     const builtin = BUILTIN.find((b) => b.schema.name === name);
     if (builtin) return builtin.run(args, signal);
     // MCP tools use the `server__tool` separator. Without it (e.g. the model invents `fs_//read`),

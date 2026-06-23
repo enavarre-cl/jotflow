@@ -182,7 +182,7 @@ export async function runInference(
         // seeing intermediate results, so they're independent and can't rely on intra-turn ordering.
         // Results are collected in request order to keep tool_result ↔ tool_call pairing intact.
         const toolResults = await Promise.all(res.toolCalls.map(async (tc): Promise<{ tc: typeof tc; out: string }> => {
-          let args: unknown = {};
+          let args: Record<string, unknown> = {};
           let parseError = false;
           try { args = JSON.parse(tc.arguments || '{}'); } catch { parseError = true; }
           webview.postMessage({ type: 'toolCall', name: tc.name, args: tc.arguments || '' });

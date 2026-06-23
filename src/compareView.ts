@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { parseDoc } from './chatDocument';
-import { chatDefaults } from './providers';
+import { chatDefaults, ChatMessage } from './providers';
 import { makeNonce } from './chatHelpers';
 import { tr } from './i18n';
 
@@ -14,7 +14,7 @@ import { tr } from './i18n';
  */
 
 /** Reads and parses a .chat from a URI (tolerates content-provider schemes such as Local History). */
-async function readChat(uri: vscode.Uri): Promise<{ title: string; messages: any[] } | null> {
+async function readChat(uri: vscode.Uri): Promise<{ title: string; messages: ChatMessage[] } | null> {
   try {
     const docu = await vscode.workspace.openTextDocument(uri);
     const doc = parseDoc(docu.getText(), chatDefaults());
@@ -24,24 +24,31 @@ async function readChat(uri: vscode.Uri): Promise<{ title: string; messages: any
   }
 }
 
+/** The URI component shape vscode.Uri.from accepts (vscode has no exported UriComponents type). */
+interface UriParts { scheme: string; authority?: string; path: string; query?: string; fragment?: string }
+/** A Timeline item argument is opaque/poorly documented; this is the subset we probe. */
+interface TimelineArg { command?: { arguments?: unknown[] }; uri?: UriParts }
+
 /** Collects candidate URIs hidden inside the Timeline item argument. */
-function collectUris(arg: any): vscode.Uri[] {
+function collectUris(arg: unknown): vscode.Uri[] {
   const out: vscode.Uri[] = [];
-  const add = (v: any) => {
+  const add = (v: unknown) => {
     if (!v) return;
     if (v instanceof vscode.Uri) { out.push(v); return; }
-    if (typeof v === 'object' && typeof v.scheme === 'string' && typeof v.path === 'string') {
-      try { out.push(vscode.Uri.from(v)); } catch { /* not a valid URI */ }
+    const o = v as Partial<UriParts>;
+    if (typeof v === 'object' && typeof o.scheme === 'string' && typeof o.path === 'string') {
+      try { out.push(vscode.Uri.from(o as UriParts)); } catch { /* not a valid URI */ }
     }
   };
-  if (arg?.command?.arguments && Array.isArray(arg.command.arguments)) arg.command.arguments.forEach(add);
-  add(arg?.uri);
+  const a = arg as TimelineArg | undefined;
+  if (a?.command?.arguments && Array.isArray(a.command.arguments)) a.command.arguments.forEach(add);
+  add(a?.uri);
   add(arg);
   return out;
 }
 
 export function registerCompare(context: vscode.ExtensionContext): void {
-  const cmd = vscode.commands.registerCommand('parley.compareVersion', async (arg: any) => {
+  const cmd = vscode.commands.registerCommand('parley.compareVersion', async (arg: unknown) => {
     // 1) Resolve the "past" and "current" versions.
     let pastUri: vscode.Uri | undefined;
     let currentUri: vscode.Uri | undefined;
@@ -49,7 +56,7 @@ export function registerCompare(context: vscode.ExtensionContext): void {
     const uris = collectUris(arg);
     const active = vscode.window.activeTextEditor?.document.uri
       ?? vscode.window.tabGroups.activeTabGroup.activeTab?.input;
-    const activeUri = active instanceof vscode.Uri ? active : (active as any)?.uri;
+    const activeUri = active instanceof vscode.Uri ? active : (active as { uri?: vscode.Uri } | undefined)?.uri;
 
     if (uris.length >= 2) {
       // The Timeline diff command is typically vscode.diff(original, modified).

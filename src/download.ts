@@ -19,10 +19,10 @@ export function sha256File(p: string): string {
  */
 function safeLookup(
   hostname: string,
-  options: any,
+  options: dns.LookupOptions,
   cb: (err: NodeJS.ErrnoException | null, address?: string, family?: number) => void,
 ): void {
-  dns.lookup(hostname, { ...(options || {}), all: true }, (err, addresses: any) => {
+  dns.lookup(hostname, { ...(options || {}), all: true }, (err, addresses: dns.LookupAddress[]) => {
     if (err) return cb(err);
     const list: { address: string; family: number }[] = Array.isArray(addresses) ? addresses : [addresses];
     const safe = list.find((a) => !ipIsPrivate(a.address));
@@ -64,8 +64,9 @@ export function downloadFile(url: string, destPath: string, opts: DownloadOpts =
       lookup: safeLookup as https.RequestOptions['lookup'],
     };
     const req = https
-      .get(reqOpts, (res: any) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+      .get(reqOpts, (res) => {
+        const status = res.statusCode ?? 0;
+        if (status >= 300 && status < 400 && res.headers.location) {
           res.resume();
           if (redirects <= 0) return reject(new Error('too many redirects'));
           const loc = Array.isArray(res.headers.location) ? res.headers.location[0] : res.headers.location;
@@ -73,15 +74,15 @@ export function downloadFile(url: string, destPath: string, opts: DownloadOpts =
           try { next = new URL(loc, url).toString(); } catch { return reject(new Error('bad redirect: ' + loc)); }
           return resolve(downloadFile(next, destPath, { redirects: redirects - 1, onProgress, signal }));
         }
-        if (res.statusCode !== 200) {
+        if (status !== 200) {
           res.resume();
-          return reject(new Error('HTTP ' + res.statusCode));
+          return reject(new Error('HTTP ' + status));
         }
         const total = parseInt(res.headers['content-length'] || '0', 10) || 0;
         let received = 0;
         const tmp = destPath + '.part';
         const file = fs.createWriteStream(tmp);
-        const fail = (e: any) => { try { file.destroy(); } catch { /* noop */ } try { fs.unlinkSync(tmp); } catch { /* noop */ } reject(e); };
+        const fail = (e: Error) => { try { file.destroy(); } catch { /* noop */ } try { fs.unlinkSync(tmp); } catch { /* noop */ } reject(e); };
         res.on('error', fail);
         file.on('error', fail);
         if (onProgress) res.on('data', (chunk: Buffer) => { received += chunk.length; onProgress(received, total); });
