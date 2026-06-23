@@ -92,6 +92,12 @@ export function downloadFile(url: string, destPath: string, opts: DownloadOpts =
       })
       .on('error', reject);
     req.setTimeout(120000, () => req.destroy(new Error('download timeout')));
-    if (signal) signal.addEventListener('abort', () => req.destroy(new Error('aborted')), { once: true });
+    if (signal) {
+      const onAbort = (): void => { req.destroy(new Error('aborted')); };
+      signal.addEventListener('abort', onAbort, { once: true });
+      // Remove the listener when the request ends without aborting — otherwise, with a shared signal
+      // (each redirect adds one), listeners accumulate on it for the life of the signal.
+      req.on('close', () => signal.removeEventListener('abort', onAbort));
+    }
   });
 }

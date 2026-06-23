@@ -354,8 +354,11 @@ export class PiperManager {
       if (this.serverProc === proc) { this.serverProc = null; this.serverPort = 0; this._onChange.fire(); }
       if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
     });
+    // Fail fast on a spawn error (e.g. python deleted between the check and spawn → ENOENT) instead
+    // of waiting out the full 20s waitForServer timeout.
+    const spawnErr = new Promise<never>((_, rej) => proc.once('error', (e) => rej(e instanceof Error ? e : new Error(String(e)))));
     try {
-      await this.waitForServer(port, 20000);
+      await Promise.race([this.waitForServer(port, 20000), spawnErr]);
     } catch (e: any) {
       killProcessTree(proc);
       throw new Error((stderr.trim().split('\n').slice(-3).join(' ') || e?.message) ?? 'piper http_server did not respond');

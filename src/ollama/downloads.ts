@@ -191,7 +191,10 @@ export class DownloadManager {
    */
   private async doImport(item: DownloadItem, signal: AbortSignal): Promise<void> {
     await this.ensureServer(); // required for `ollama create`
-    fs.mkdirSync(this.importDir, { recursive: true });
+    // Per-item subfolder: two concurrent imports whose shards share a basename (e.g. both
+    // `model-00001-of-00002.gguf`) would otherwise write to the same path and corrupt each other.
+    const itemDir = path.join(this.importDir, String(item.id).replace(/[^a-z0-9._-]/gi, '_'));
+    fs.mkdirSync(itemDir, { recursive: true });
     const paths = item.importPaths || [];
     if (!paths.length) throw new Error('no .gguf to import');
     const tmpFiles: string[] = [];   // everything to clean up
@@ -202,7 +205,7 @@ export class DownloadManager {
       let done = 0;
       for (let i = 0; i < paths.length; i++) {
         const base = (paths[i].split('/').pop() || `model${i}.gguf`).replace(/[^a-z0-9._-]/gi, '_');
-        const dest = path.join(this.importDir, base);
+        const dest = path.join(itemDir, base);
         tmpFiles.push(dest); modelParts.push(dest);
         item.status = paths.length > 1
           ? `${tr('downloading model')} (${i + 1}/${paths.length})`
@@ -219,7 +222,7 @@ export class DownloadManager {
       let projTmp: string | undefined;
       const proj = await projectorFile(item.modelId, signal).catch(() => undefined);
       if (proj) {
-        projTmp = path.join(this.importDir, ((item.name || 'model').replace(/[^a-z0-9._-]/gi, '_')) + '.mmproj.gguf');
+        projTmp = path.join(itemDir, ((item.name || 'model').replace(/[^a-z0-9._-]/gi, '_')) + '.mmproj.gguf');
         item.status = tr('downloading projector (vision)'); this._onChange.fire();
         await downloadFile(hfFileUrl(item.modelId, proj), projTmp, { signal });
         tmpFiles.push(projTmp);
@@ -228,6 +231,7 @@ export class DownloadManager {
       await this.createModel(item.name || item.ref, modelParts, projTmp);
     } finally {
       for (const f of tmpFiles) { try { fs.unlinkSync(f); } catch { /* ignore */ } }
+      try { fs.rmdirSync(itemDir); } catch { /* not empty / already gone */ }
     }
   }
 
