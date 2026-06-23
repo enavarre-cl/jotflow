@@ -14,7 +14,7 @@
 
 ## 📋 Inventario completo (74 hallazgos: 67 auditoría + W8 + 6 de la 2.ª pasada)
 
-> **Estado: 73 ✅ corregidos · 1 🔎 revisado/por-diseño (H3 — no es bug, olor de estado global F4) · 0 ⬜ abiertos.**
+> **Estado: 74 ✅ corregidos · 0 🔎 · 0 ⬜ abiertos. TODO CERRADO.**
 > **Cerrados en esta tanda final:** P11 (validación baseUrl), P12 (request bodies tipados),
 > H9 (CSP acotada a Mermaid), **X1 (`any` 182→0 en todo `src/`)**, X4 (higiene de archivos).
 > ✅ = corregido y commiteado · 🔎 = revisado, no era bug / por diseño · ⬜ = abierto.
@@ -43,7 +43,7 @@
 - ✅ W4 🟡 processMermaid sin race · ✅ W5 🟡 god-view partido (conversation 500→382 + export.js + panels.js) · ✅ W6 ⚪ escapeHtml coacciona String · ✅ W7 ⚪ mermaid sin unescape
 
 **Host / orquestación**
-- ✅ H1 🟠 secrets.onDidChange sin disposable · ✅ H2 router floating promise · 🔎 H3 revisado: NO es bug (convención F4, funcionalmente correcto)
+- ✅ H1 🟠 secrets.onDidChange sin disposable · ✅ H2 router floating promise · ✅ H3 🟠 `activeApply` global → registro de editores por recencia de foco (`ac930ca`)
 - ✅ H4 🟠 summary.upTo sin validar rango · ✅ H5 🟡 busyRef: setConfig bajo lock · ✅ H6 🟡 exportHtml con CSP+nonce
 - ✅ H7 🟡 nonce crypto unificado · ✅ H8 🟡 modelsPanel valida import paths · ✅ H9 ⚪ CSP unsafe-inline: la app ya **no** depende de ella (barra de progreso `style=`→CSSOM); queda atribuible **solo** al SVG de Mermaid (atributos `style=` que ni nonce ni hash cubren), con el residual documentado y acotado (`9c11653`) · ✅ H10 ⚪ IDs con randomUUID
 
@@ -152,7 +152,7 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 
 - **✅ [Alta] BUG `extension.ts:74` — CORREGIDO** — `context.secrets.onDidChange(...)` ahora se registra en `context.subscriptions` → se limpia en deactivate (T8).
 - **✅ [Alta] BUG `extension.ts:313` — CORREGIDO** — el callback ahora hace `void routeMessage(...).catch(...)`: loguea el error (`console.error`) y postea un `error` al webview, en vez de dejar un unhandled rejection sin feedback (la UI ya no queda colgada). `no-floating-promises` satisfecho.
-- **🔎 [reclasificado] `extension.ts:135,361` (H3) — NO es bug** — revisado en detalle: `applyConfig` está acotado a su editor por closure (`getDoc`/`writeDoc`/`document` capturados), y `doc` se captura antes del `await`, así que NO escribe sobre el doc equivocado. El `static activeApply` solo enruta el "usar en chat" del sidebar al último chat activo (comportamiento deseado, documentado en el código). Es un olor de estado global (F4) pero funcionalmente correcto; no amerita cambio. Mi auditoría inicial lo sobrevaloró como "Alta BUG".
+- **✅ `extension.ts` (H3) — CORREGIDO** (`ac930ca`) — el `static activeApply` (olor de estado global F4) se reemplazó por un **registro de editores ordenado por recencia de foco**: `activeApply()` devuelve la fn del editor enfocado, o la del último enfocado aún abierto. Esto elimina el global mutable y además cierra el hueco de UX que tenía el patrón anterior (cerrar un chat abierto encima de otro dejaba la referencia en `undefined` hasta re-enfocar); ahora se restaura el chat de abajo como destino.
 - **✅ [Alta] BUG `chatDocument.ts:174` — CORREGIDO** — `summary.upTo` se clampa a `[0, messages.length]` con `Math.floor`; valores corruptos (`-5`→drop, `99999`→len, `2.7`→2, `NaN`→drop) ya no se propagan al conteo de contexto. (verificado)
 - **✅ [Media] BUG `messageRouter.ts:145` (H5) — CORREGIDO (parcial)** — `setConfig` ahora adquiere `busyRef` durante todo el handler (incluye el diálogo de Trust, ventana de segundos). delete/edit/replace son mutaciones síncronas + un `writeDoc` (ventana sub-ms ya cubierta por el chequeo y la UI serial de un solo usuario); residual despreciable.
 - **✅ [Media] BUG `messageRouter.ts:364` (H6) — CORREGIDO/mitigado** — el HTML exportado lleva una CSP estricta con `nonce` para el script de auto-print (bloquea frames/objects/fetch/forms y cualquier inline script inesperado). El cuerpo ya iba escapado (renderMarkdown), así que el modelo no podía inyectar script; esto es defensa en profundidad.
