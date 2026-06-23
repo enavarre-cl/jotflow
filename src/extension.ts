@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 import { chatDefaults, providerInfo, isProviderId, setApiKeyOverride, ChatMessage, ProviderId } from './providers';
 import {
   ChatDoc,
@@ -194,7 +195,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       const prune = opts?.prune !== false;
       // Stamps id + timestamp on every message that doesn't have them yet (single place for all).
       for (const m of doc.messages) {
-        if (!m.id) m.id = `msg_${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+        if (!m.id) m.id = `msg_${crypto.randomUUID()}`; // collision-free (Date.now()+random collided in a sync loop)
         if (!m.ts) m.ts = new Date().toISOString();
       }
       const text = serializeDoc(doc);

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { ChatDoc } from './chatDocument';
 
 /**
@@ -77,7 +78,7 @@ export class AttachmentStore {
     const store = this.load();
     const refs: any[] = [];
     for (const a of atts) {
-      const id = `att_${Date.now().toString(36)}${Math.floor(Math.random() * 1e9).toString(36)}`;
+      const id = `att_${crypto.randomUUID()}`; // collision-free (Date.now()+random collided in a sync loop)
       const bytes = typeof a.data === 'string' ? a.data.length : 0;
       store[id] = { kind: a.kind, name: a.name, mime: a.mime, data: a.data, bytes };
       refs.push({ kind: a.kind, name: a.name, mime: a.mime, ref: id, bytes }); // bytes → token budgeting
