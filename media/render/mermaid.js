@@ -53,6 +53,10 @@ import { t } from '../core/i18n.js';
       try {
         const id = 'mmd-' + (_mermaidSeq++);
         const { svg } = await mermaid.render(id, code); // always render fresh
+        // A re-render (renderConversation does innerHTML='') may have detached this node while we
+        // awaited the ~3MB mermaid lib. Mounting into a disconnected node is wasted work and makes
+        // diagrams "disappear"; the replacement node (re-flagged pending) is handled on the next pass.
+        if (!el.isConnected) continue;
         mountMermaid(el, svg);
       } catch (e) {
         // Keep the source visible and append a discreet error note.
