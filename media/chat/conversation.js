@@ -194,6 +194,13 @@ export function renderConversation() {
     const displayable = (mm) => !((mm.role === 'assistant' && Array.isArray(mm.toolCalls) && mm.toolCalls.length) || mm.role === 'tool');
     let lastDisplayable = -1;
     for (let k = visible.length - 1; k >= 0; k--) { if (displayable(visible[k])) { lastDisplayable = k; break; } }
+    // Index of the user prompt whose answer is the last displayable assistant — even when tool
+    // calls put intermediate (non-displayable) assistant/tool messages between them. Used for the
+    // "regenerate response" button, which must appear on that prompt regardless of adjacency.
+    let lastPromptIdx = -1;
+    if (lastDisplayable >= 0 && visible[lastDisplayable].role === 'assistant') {
+      for (let k = lastDisplayable - 1; k >= 0; k--) { if (visible[k].role === 'user') { lastPromptIdx = k; break; } }
+    }
     let lastThinking = '';
     let pendingTools = []; // tool activity accumulated up to the final message of the turn
     // Summary: messages [0..upTo) are compacted (not resent). We mark the boundary with a
@@ -326,7 +333,7 @@ export function renderConversation() {
       const canGenerate = m.role === 'user' && isLast;
       // User message whose response (the following assistant) is the last displayable:
       // allows re-rolling from the prompt without having to delete the assistant message.
-      const canRegenFromPrompt = m.role === 'user' && visible[i + 1] && visible[i + 1].role === 'assistant' && (i + 1) === lastDisplayable;
+      const canRegenFromPrompt = m.role === 'user' && i === lastPromptIdx;
       const activity = (m.role === 'assistant' && pendingTools.length) ? pendingTools.slice() : null;
       // Divider before the first message at/after the boundary (last-N wins over the summary).
       if (lastN) {

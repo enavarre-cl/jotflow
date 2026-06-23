@@ -35,7 +35,7 @@
 - ⬜ A7 🟡 mcp servidor caído cuelga 30s · ⬜ A8 🟡 inference traga error de args JSON · ⬜ A9 ⚪ MAX_ITERS=0 sin tope · ⬜ A10 ⚪ mcp descarta stderr
 
 **Webview**
-- ⬜ W1 🟡 botón regenerar ausente tras tools (reportado) · ✅ W2 🟠 colisión placeholder code-span · ⬜ W3 🟡 listas anidadas se aplanan
+- ✅ W1 🟡 botón regenerar ausente tras tools (reportado) · ✅ W2 🟠 colisión placeholder code-span · ⬜ W3 🟡 listas anidadas se aplanan
 - ⬜ W4 🟡 processMermaid flotante + race · ⬜ W5 🟡 conversation.js god-view (refactor) · ⬜ W6 ⚪ escapeHtml revienta con no-string · ⬜ W7 ⚪ mermaid unescape deprecado
 
 **Host / orquestación**
@@ -129,7 +129,7 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 
 ## 🟠 Webview / render (`media/**`)
 
-- **[Media] BUG `media/chat/conversation.js:329` (reportado por el usuario, 2026-06-22)** — Al abrir un `.chat` cuyo último intercambio **usó tools**, el botón de **regenerar la respuesta** no aparece en el bubble del usuario. `canRegenFromPrompt` asume que la respuesta está en `i+1` y es `lastDisplayable`: `m.role==='user' && visible[i+1].role==='assistant' && (i+1)===lastDisplayable`. Con tools, el doc es `[user, assistant(toolCalls), tool, assistant(final)]`, así que `visible[i+1]` es el assistant intermedio con `toolCalls` (no displayable) y `(i+1)!==lastDisplayable` → la condición falla. Debe comprobar que **no hay un user posterior** y que `lastDisplayable` es un assistant tras `i`, en vez de exigir adyacencia. (Verificado contra la foto: solo aparece ⏩ "Continue" en el assistant final.)
+- **✅ [Media] BUG `media/chat/conversation.js:329` (W1, reportado) — CORREGIDO** — `canRegenFromPrompt` ya no exige adyacencia (`i+1===lastDisplayable`); se calcula `lastPromptIdx` (el último prompt de usuario cuya respuesta es `lastDisplayable`) y se compara `i===lastPromptIdx`. Así el botón regenerar aparece aunque entre el prompt y la respuesta haya mensajes intermedios de tools. (verificado: con tools, sin tools y multi-turno)
 
 - **✅ [Alta] BUG `markdown.js:39,52` — CORREGIDO** — placeholder de code-spans pasa de ` dígito ` a ` dígito ` (NUL, jamás en prosa) → "entre 0 y 1 hay `x`" ya no corrompe los números ni emite `<code>undefined</code>`. (verificado)
 - **[Media] BUG `markdown.js:130-141`** — **Listas anidadas se aplanan** (se descarta la indentación) → toda jerarquía se pierde en el render.
