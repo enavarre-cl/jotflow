@@ -125,10 +125,24 @@ export class PiperManager {
     fs.mkdirSync(dir, { recursive: true });
     const onnx = path.join(dir, id + '.onnx');
     const json = path.join(dir, id + '.onnx.json');
-    if (fs.existsSync(onnx) && fs.existsSync(json)) return onnx;
+    // The .onnx.json (phoneme map / config consumed by the native binary) has no pinned hash, so
+    // validate it structurally: a truncated download or an HF HTML error page saved as .json would
+    // otherwise be trusted forever (the old `if (!existsSync) download` skipped re-fetching it).
+    const jsonValid = (): boolean => {
+      try {
+        const cfg = JSON.parse(fs.readFileSync(json, 'utf8'));
+        return !!cfg && typeof cfg === 'object' && !Array.isArray(cfg)
+          && !!cfg.phoneme_id_map && typeof cfg.phoneme_id_map === 'object';
+      } catch { return false; }
+    };
+    if (fs.existsSync(onnx) && fs.existsSync(json) && jsonValid()) return onnx;
     const urls = piperVoiceUrls(id);
     notify?.(tr('Downloading voice: ') + id + ' …');
-    if (!fs.existsSync(json)) await downloadFile(urls.json, json);
+    if (!fs.existsSync(json) || !jsonValid()) {
+      try { fs.unlinkSync(json); } catch { /* may not exist */ }
+      await downloadFile(urls.json, json);
+      if (!jsonValid()) { try { fs.unlinkSync(json); } catch { /* noop */ } throw new Error(`voice config invalid/corrupt: ${id}`); }
+    }
     if (!fs.existsSync(onnx)) await downloadFile(urls.onnx, onnx);
     // Verify integrity against the pinned SHA256. Fail-closed: no hash, not used.
     const expected = PIPER_VOICE_SHA256[id];

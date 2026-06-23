@@ -44,7 +44,7 @@
 - ⬜ H7 🟡 nonce con Math.random · ⬜ H8 🟡 modelsPanel msg.path traversal · ⬜ H9 ⚪ CSP unsafe-inline · ⬜ H10 ⚪ IDs débiles colisionables
 
 **Motores locales**
-- ✅ L1 zombies tree-kill · ⬜ L2 🟠 .onnx.json sin hash · ⬜ L3 🟠 voz parcial no revalida · ⬜ L4 🟡 colisión nombres importDir
+- ✅ L1 zombies tree-kill · ✅ L2 🟠 .onnx.json validado · ✅ L3 🟠 voz parcial revalidada · ⬜ L4 🟡 colisión nombres importDir
 - ⬜ L5 🟡 piper startServer sin on('error') · ⬜ L6 🟡 abort listener + .part huérfano · ⬜ L7 ⚪ python del PATH untrusted · ⬜ L8 ⚪ synthViaServer sin timeout
 
 **i18n / CSS / transversal**
@@ -154,8 +154,8 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 ## 🟠 Motores locales (Ollama / Piper / descargas)
 
 - **✅ [Alta] BUG `ollama/manager.ts:142,194` + `piper/manager.ts` — CORREGIDO** — nuevo helper `killProcessTree` (`src/procKill.ts`): en Windows `taskkill /pid /T /F` mata el árbol (el `shell:true` envuelve `cmd.exe`); en POSIX SIGTERM y escalada a SIGKILL tras 3s. Aplicado en `stop()` de Ollama y `stopServer()`/startup-fail de Piper. (escalada SIGKILL verificada en POSIX)
-- **[Alta] BUG `piper/manager.ts:130`** — El **`.onnx.json` de las voces se descarga sin verificar hash** (solo el `.onnx` se compara contra SHA pin). Config de fonemas sin pin (U6).
-- **[Alta] BUG `piper/manager.ts:122-141`** — Descarga de voz parcial: un `.onnx.json` corrupto previo (p. ej. HTML de error de HF) **nunca se revalida** en el reintento (`if (!existsSync(json))` lo salta).
+- **✅ [Alta] BUG `piper/manager.ts:130` (L2) — CORREGIDO** — el `.onnx.json` se valida estructuralmente (`JSON.parse` + `phoneme_id_map` objeto); un HTML de error de HF o un json truncado se rechaza. (verificado)
+- **✅ [Alta] BUG `piper/manager.ts:122-141` (L3) — CORREGIDO** — `ensureVoice` revalida el json existente y lo **re-descarga** si es inválido (en vez de `if (!existsSync)` que saltaba un json corrupto previo); si tras re-descargar sigue inválido, falla.
 - **[Media] BUG `ollama/downloads.ts:204`** — **Colisión de nombres en `importDir`** entre descargas concurrentes (mismo basename de shard) → se corrompen mutuamente. Falta subcarpeta por id.
 - **[Media] BUG `piper/manager.ts:328`** — `startServer` **no captura `proc.on('error')`** → spawn fallido (ENOENT) cuelga 20s hasta timeout.
 - **[Media] BUG `download.ts:62`** — Listener `abort` **nunca se remueve**; `.part` huérfano de un crash (kill del editor) **nunca se barre** al arrancar.
