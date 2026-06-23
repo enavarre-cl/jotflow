@@ -42,8 +42,14 @@ export function renderWebviewHtml(
       webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', f));
     const csp = [
       `default-src 'none'`,
-      // 'unsafe-inline' is required by Mermaid: it embeds a <style> element inside the rendered
-      // SVG (which carries no nonce). Scripts stay nonce-locked, so this only loosens styling.
+      // style-src 'unsafe-inline' is required ONLY by the vendored Mermaid renderer: its generated
+      // SVG carries a <style> block (no nonce) AND per-node inline `style=` attributes, and inline
+      // style ATTRIBUTES cannot be authorised by a nonce or hash — only by 'unsafe-inline'. The
+      // extension's own DOM no longer relies on it (H9). The residual risk is bounded: script-src is
+      // nonce + strict-dynamic locked (no script injection), default-src is 'none', and connect-src
+      // is limited to the webview origin, so CSS-only injection has no exfiltration channel. Fully
+      // removing it would require rendering Mermaid inside a sandboxed iframe (a rewrite of the
+      // pan/zoom/sizing/copy-as-image viewer), tracked as a follow-up rather than done blindly here.
       `style-src ${webview.cspSource} 'unsafe-inline'`,
       // 'strict-dynamic': the nonce'd module entry (app/main.js) statically imports the rest of the
       // webview modules; strict-dynamic propagates trust to those imports (they carry no nonce).

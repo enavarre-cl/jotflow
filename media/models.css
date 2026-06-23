@@ -104,7 +104,7 @@ body.models-browser { padding: 0; margin: 0; height: 100vh; overflow: hidden; }
 }
 #mb-progress.hidden { display: none; }
 .mb-bar { height: 6px; border-radius: 4px; background: var(--vscode-panel-border); margin-top: 8px; overflow: hidden; }
-.mb-bar > div { height: 100%; background: var(--vscode-progressBar-background, #0a84ff); transition: width .2s; }
+.mb-bar > div { width: 0; height: 100%; background: var(--vscode-progressBar-background, #0a84ff); transition: width .2s; }
 .mb-spin {
   display: inline-block; width: 11px; height: 11px; vertical-align: -1px;
   border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;

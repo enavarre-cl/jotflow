@@ -209,7 +209,9 @@
       btns = [['cancel', t('Cancel'), d.id]];
     } else if (d.state === 'downloading') {
       const pct = typeof d.pct === 'number' ? d.pct : null;
-      const bar = pct != null ? `<div class="mb-bar"><div style="width:${pct}%"></div></div>` : '';
+      // Width is set via JS after insertion (see below), not an inline style attribute, so the CSP
+      // does not need style-src 'unsafe-inline' on the app's own DOM (H9).
+      const bar = pct != null ? '<div class="mb-bar"><div></div></div>' : '';
       head = `<span class="mb-spin"></span> <span class="mb-ptext">${esc(progressText(d))}</span>${bar}`;
       btns = [['cancel', t('Cancel'), d.id]];
     } else if (d.state === 'done') {
@@ -228,6 +230,10 @@
     }
     p.innerHTML = head + btns.map(([act, label, val]) =>
       ` <button class="mb-pbtn" data-act="${act}" data-val="${esc(val)}">${esc(label)}</button>`).join('');
+    if (d.state === 'downloading' && typeof d.pct === 'number') {
+      const fill = p.querySelector('.mb-bar > div');
+      if (fill) fill.style.width = d.pct + '%';
+    }
     p.querySelectorAll('.mb-pbtn').forEach((b) => b.addEventListener('click', () => {
       const act = b.getAttribute('data-act'); const val = b.getAttribute('data-val');
       if (act === 'cancel') vscode.postMessage({ type: 'cancelDownload', id: val });
