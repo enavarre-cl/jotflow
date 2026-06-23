@@ -185,7 +185,7 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 ## Transversales
 
 - **⬜ DEUDA DIFERIDA — `any` en lógica interna (X1 + P12)**: ~185 ocurrencias (`localModels.ts`, `mcp.ts`, `chatDocument.ts`, `inference.ts`, `attachmentStore.ts`, `ttsBackend.ts`, bodies de request en providers). Tipar a `unknown`+narrowing / tipos propios. Mecánico, bajo riesgo, bajo valor; ESLint lo permite a propósito. Pendiente para una pasada dedicada.
-- **6 archivos en 400–500 líneas** (M2): `conversation.js` (god-view), `piper/manager.ts`, `extension.ts`, `messageRouter.ts`, `models.js`, `panels/config.js`.
+- **✅ [M2] 6 archivos 400–500 — REDUCIDOS** (split por cohesión): `conversation.js` 500→382 (+export.js+panels.js), `messageRouter.ts` 445→394 (+sysprompt), `panels/config.js` 407→287 (+configTts.js), `piper/manager.ts` 481→413 (+assets.ts), `extension.ts` 449→404 (+applyPatch.ts). **Pendiente:** `media/models.js` (409) es un IIFE clásico (no ES module, `<script src>`); partirlo a ciegas (sin poder correr la app) es riesgoso y solo está 9 líneas sobre la alarma blanda — diferido a una sesión con la app corriendo.
 - **✅ `catch` vacíos (X3) — CORREGIDO** — comentados como best-effort (tts logging/audio, pointer capture).
 - **🔎 Higiene (X4) — decisión del usuario** — `.webview-backup/` (gitignored) y `plan-*.md` (no trackeados) no afectan el repo ni el paquete; son archivos locales tuyos, no los borro sin permiso.
 
