@@ -66,8 +66,10 @@ export class GeminiProvider implements LLMProvider {
         continue;
       }
       if (m.role === 'tool') {
+        // Gemini 400s on a missing/empty function name (JSON.stringify drops `undefined`). Coerce to
+        // a non-empty string so a malformed tool message degrades instead of failing the whole call.
         pendingFnResponses.push({
-          functionResponse: { name: m.toolName, response: { result: m.content } },
+          functionResponse: { name: m.toolName || 'tool', response: { result: m.content } },
         });
         continue;
       }

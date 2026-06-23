@@ -26,8 +26,8 @@
 **Providers**
 - ✅ P1 stream flush final · ✅ P2 stream reader release · ✅ P3 🟠 AbortSignal chequeado en read-loop
 - ✅ P4 🟡 timeout de red · ✅ P5 🟡 tool-call id con índice · ✅ P6 🟡 isImageOutputModel ajustado
-- ✅ P7 🟡 anthropic temperature:1 fijado · ✅ P8 🟡 defensive cap 64MiB · ⬜ P9 🟡 gemini functionResponse sin validar toolName
-- ✅ P10 ⚪ multiple tool_calls por id · ⬜ P11 ⚪ baseUrl sin validar (4 providers) · ⬜ P12 🟡 `any` en bodies de request
+- ✅ P7 🟡 anthropic temperature:1 fijado · ✅ P8 🟡 defensive cap 64MiB · ✅ P9 🟡 gemini functionResponse valida toolName
+- ✅ P10 ⚪ multiple tool_calls por id · 🔎 P11 revisado: premisa incorrecta (baseUrl es settings, no .chat) · ⬜ P12 🟡 `any` en bodies de request
 
 **Loop agéntico / tools**
 - ✅ A1 🟠 abort persiste assistant+toolCalls sin respuesta · ✅ A2 🟠 tools en paralelo · ⬜ A3 🟡 fs_search síncrono bloquea event loop
@@ -110,9 +110,9 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 - **✅ [Media] BUG `multimodal.ts:23` (P6) — CORREGIDO** — regex ajustado a patrones de generación (`nano-banana`, `flash-image`, `image-generation/preview`, `-image$`); ya no captura `image-input`/visión.
 - **✅ [Media] BUG `anthropic.ts:110-119` (P7) — CORREGIDO** — `body.temperature = 1` se fija explícitamente con thinking (antes solo estaba en el comentario).
 - **✅ [Media] BUG `stream.ts:36` (P8) — CORREGIDO** — cap subido de 4MiB a 64MiB: una imagen base64 inline ya no se trunca; solo se recorta un stream realmente desbocado.
-- **[Media] BUG `gemini.ts:69`** — `functionResponse` sin validar `toolName` ausente → Gemini 400. Sin validación de frontera (L4).
+- **✅ [Media] BUG `gemini.ts:69` (P9) — CORREGIDO** — `name: m.toolName || 'tool'`: un tool message malformado degrada en vez de mandar `undefined` y 400 toda la llamada.
 - **✅ [Baja] BUG `openai.ts:217` (P10) — CORREGIDO** — la clave del acumulador es `index` o, en su defecto, `id`: múltiples tool_calls completas en un delta ya no colapsan en slot 0.
-- **[Baja] BUG (4 providers)** — `baseUrl` de settings se concatena sin validar esquema/host y la API key viaja en headers → un `.chat` compartido con baseUrl malicioso podría exfiltrar la key.
+- **🔎 [reclasificado] (4 providers) (P11) — premisa incorrecta** — `baseUrl` viene de **settings locales**, NO del `.chat` (que solo guarda provider+model), así que no hay exfiltración vía `.chat` compartido. El residual (endpoint http puesto por el usuario) es necesario para local (Ollama/LM Studio). Sin cambio.
 - **[Media] CONVENCIÓN (todos)** — `body: any`, `usage: any`, `parts: any[]` en cuerpos de request que el propio código construye (tipables). Viola C2/C3: `any` solo para JSON de entrada, no para lo que tú rellenas.
 
 ## 🟠 Loop agéntico y tools (`src/inference.ts`, `tools.ts`, `mcp.ts`)
