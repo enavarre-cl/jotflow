@@ -257,6 +257,14 @@ export function parseDoc(text: string, defaults: ChatDefaults): ChatDoc {
           })
       : [],
   };
+  // Clamp summary.upTo to a valid message index. A corrupt/hand-edited value (-5, 99999, 2.7, NaN)
+  // would otherwise propagate into the context-window math. Drop the summary if it covers nothing.
+  if (doc.summary) {
+    let upTo = Math.floor(doc.summary.upTo);
+    if (!Number.isFinite(upTo) || upTo < 0) upTo = 0;
+    if (upTo > doc.messages.length) upTo = doc.messages.length;
+    doc.summary = upTo > 0 ? { text: doc.summary.text, upTo } : undefined;
+  }
   // Preserve unknown top-level keys so a hand-edited or future-version field survives a round-trip
   // instead of being silently dropped on the next save. Only for v2-shaped docs (a v1 doc keeps its
   // loose params on `raw`, which are migrated into `params` — not "unknown").
