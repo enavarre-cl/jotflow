@@ -12,7 +12,8 @@ import { getDoc } from '../ui/store.js';
 import { clearNotices } from '../ui/notifications.js';
 import { tts } from '../features/tts.js';
 import { handleFileKeydown, handleSuggestKeydown, setupEmojiAutocomplete } from '../features/autocomplete.js';
-import { openThink, openTools, showThinking, showTools, scrollDown, resetTools } from './conversation.js';
+import { scrollDown, resetTools } from './conversation.js';
+import { openThink, openTools, showThinking, showTools } from './panels.js';
 
 const messagesEl = $('messages');
 
