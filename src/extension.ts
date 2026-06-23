@@ -1,15 +1,15 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
-import { chatDefaults, providerInfo, isProviderId, setApiKeyOverride, ChatMessage, ProviderId } from './providers';
+import { chatDefaults, providerInfo, setApiKeyOverride, ChatMessage, ProviderId } from './providers';
 import {
   ChatDoc,
-  ChatParams,
   parseDoc,
   serializeDoc,
   defaultDoc,
 } from './chatDocument';
 import { renderWebviewHtml } from './webviewHtml';
 import { AttachmentStore } from './attachmentStore';
+import { applyPatch } from './applyPatch';
 import { runInference as runInferenceImpl } from './inference';
 import { routeMessage } from './messageRouter';
 import { makeChatOps } from './chatOps';
@@ -23,7 +23,7 @@ import { ToolHub } from './tools';
 import { initProxy } from './http';
 import { tr, resolvedLang, activeBundle } from './i18n';
 import { registerCompare } from './compareView';
-import { SpellWordsStore, SPELL_LANGS } from './spellWords';
+import { SpellWordsStore } from './spellWords';
 import { openDictionaryPanel } from './dictionaryPanel';
 import { listPiperVoices } from './piperVoices';
 import { PiperManager } from './piper/manager';
@@ -398,51 +398,6 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       downloadedVoices: this.downloadedVoiceIds(),
       piperCustomSet: !!vscode.workspace.getConfiguration("parley").get<string>("tts.piperModel", ""),
     });
-  }
-}
-
-const TOGGLE_KEYS: (keyof ChatParams)[] = [
-  'maxTokens', 'contextMessages', 'contextLength', 'numThreads', 'topK', 'topP', 'minP', 'topA',
-  'repeatPenalty', 'presencePenalty', 'frequencyPenalty', 'seed',
-];
-
-/** Applies to `doc` only the valid keys arriving from the webview (including nested config). */
-function applyPatch(doc: ChatDoc, patch: any): void {
-  if (!patch || typeof patch !== 'object') return;
-  if (typeof patch.title === 'string') doc.title = patch.title;
-  if (isProviderId(patch.provider)) {
-    doc.provider = patch.provider;
-  }
-  if (typeof patch.model === 'string') doc.model = patch.model;
-  if (typeof patch.systemPrompt === 'string') doc.systemPrompt = patch.systemPrompt;
-  if (['auto', 'off', ...SPELL_LANGS].includes(patch.spellLang)) doc.spellLang = patch.spellLang;
-
-  const p = patch.params;
-  if (p && typeof p === 'object') {
-    if (typeof p.temperature === 'number' && !Number.isNaN(p.temperature)) {
-      doc.params.temperature = p.temperature;
-    }
-    if (Array.isArray(p.stop)) {
-      doc.params.stop = p.stop.filter((s: any) => typeof s === 'string');
-    }
-    if (typeof p.thinking === 'boolean') {
-      doc.params.thinking = p.thinking;
-    }
-    if (typeof p.autoSummary === 'boolean') {
-      doc.params.autoSummary = p.autoSummary;
-    }
-    if (typeof p.tools === 'boolean') {
-      doc.params.tools = p.tools;
-    }
-    for (const key of TOGGLE_KEYS) {
-      const incoming = p[key];
-      if (!incoming || typeof incoming !== 'object') continue;
-      const current = doc.params[key] as { enabled: boolean; value: number };
-      if (typeof incoming.enabled === 'boolean') current.enabled = incoming.enabled;
-      if (typeof incoming.value === 'number' && !Number.isNaN(incoming.value)) {
-        current.value = incoming.value;
-      }
-    }
   }
 }
 
