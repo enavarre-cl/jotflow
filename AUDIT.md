@@ -130,6 +130,8 @@ Tres cosas que dije en auditorías previas de esta sesión estaban **mal**. Las 
 
 ## 🟠 Webview / render (`media/**`)
 
+- **✅ [Alta] BUG `conversation.js:38` stableSplit (W8, reportado 2026-06-22) — CORREGIDO** — durante el streaming, la primera letra de un bloque tras `\n\n` se recortaba ("Jenny"→"enny") hasta el render final. `stableSplit` sumaba un `\n` inexistente tras la última línea del `split`, sobrepasando `text.length`; `streamCommitLen` avanzaba de más y el siguiente carácter caía en el hueco entre el commit estable y el tail. Fix: no contar el `\n` de la última línea. (reproducido y verificado: el render stable+tail vuelve a coincidir con el whole-text en cada frame)
+
 - **✅ [Media] BUG `media/chat/conversation.js:329` (W1, reportado) — CORREGIDO** — `canRegenFromPrompt` ya no exige adyacencia (`i+1===lastDisplayable`); se calcula `lastPromptIdx` (el último prompt de usuario cuya respuesta es `lastDisplayable`) y se compara `i===lastPromptIdx`. Así el botón regenerar aparece aunque entre el prompt y la respuesta haya mensajes intermedios de tools. (verificado: con tools, sin tools y multi-turno)
 
 - **✅ [Alta] BUG `markdown.js:39,52` — CORREGIDO** — placeholder de code-spans pasa de ` dígito ` a ` dígito ` (NUL, jamás en prosa) → "entre 0 y 1 hay `x`" ya no corrompe los números ni emite `<code>undefined</code>`. (verificado)

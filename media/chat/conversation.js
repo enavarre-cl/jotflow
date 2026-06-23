@@ -41,7 +41,11 @@ let toolsLive = []; // tool activity for the current turn
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       if (/^```/.test(line)) inFence = !inFence;
-      offset += line.length + 1; // re-add the '\n' that split() removed
+      // Re-add the '\n' that split() removed — but NOT after the last element (there is no trailing
+      // newline). Counting it overshot `lastSafe` past text.length when the text ended in '\n\n', so
+      // streamCommitLen advanced too far and the next char fell into the gap (a clipped first letter,
+      // e.g. "Jenny" → "enny", until the final whole-text render).
+      offset += line.length + (i < lines.length - 1 ? 1 : 0);
       if (!inFence && /^\s*$/.test(line)) lastSafe = offset; // block boundary
     }
     return lastSafe;
