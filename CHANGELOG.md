@@ -22,6 +22,11 @@ across 39 commits; see `AUDIT.md` for per-finding detail and `BEST-PRACTICES.md`
 - Reject absolute/`..` model-import paths from the webview. ([`c951136`](https://github.com/enavarre-cl/parley/commit/c951136))
 
 ### Fixed
+- Streaming kept multi-line blocks intact (tables/lists/blockquotes no longer fragment into one-line paragraphs until the stream ends). ([`fbd617f`](https://github.com/enavarre-cl/parley/commit/fbd617f))
+- Bold spans can contain a lone `*`/`_` (e.g. `**2 * 3 = 6**`) instead of corrupting into a spurious `<em>`. ([`82faf65`](https://github.com/enavarre-cl/parley/commit/82faf65))
+- Table cells respect an escaped `\|` and a `|` inside a code span. ([`82faf65`](https://github.com/enavarre-cl/parley/commit/82faf65))
+- Deleting a chat-response variant no longer jumps to a different variant when an earlier one is removed. ([`ab4cefc`](https://github.com/enavarre-cl/parley/commit/ab4cefc))
+- A turn that used tools but returned no closing text now persists a closing assistant (no dangling tool chain lost next turn). ([`aafab77`](https://github.com/enavarre-cl/parley/commit/aafab77))
 - Streaming clipped the first letter of a block ("Jenny" → "enny") until the stream ended. ([`05fb7d4`](https://github.com/enavarre-cl/parley/commit/05fb7d4))
 - Numbers in prose rendered as `<code>undefined</code>` ("entre 0 y 1") — code-span placeholder collision. ([`8e79369`](https://github.com/enavarre-cl/parley/commit/8e79369))
 - Show the regenerate button on the prompt even when the answer used tools. ([`af08fd3`](https://github.com/enavarre-cl/parley/commit/af08fd3))
@@ -55,6 +60,12 @@ across 39 commits; see `AUDIT.md` for per-finding detail and `BEST-PRACTICES.md`
 - i18n: translate 24 UI strings into es/pt/fr/de/it, fix British spelling, drop unused keys. ([`d420d11`](https://github.com/enavarre-cl/parley/commit/d420d11))
 - CSS: theme-token status colors, keyboard focus ring, deduplicated badges. ([`e18686d`](https://github.com/enavarre-cl/parley/commit/e18686d))
 - Comment best-effort empty catches. ([`3c715b6`](https://github.com/enavarre-cl/parley/commit/3c715b6))
+
+
+### Known issues
+- Find & Replace can replace the wrong occurrence when the search term appears inside a URL or
+  Markdown syntax (the webview counts visible matches, the host counts raw-source occurrences; they
+  diverge when a source occurrence renders no visible mark). Tracked in `AUDIT.md` (B4).
 
 ### Added
 - `BEST-PRACTICES.md` (dev standard) and `AUDIT.md` (full audit). ([`99ce763`](https://github.com/enavarre-cl/parley/commit/99ce763))
