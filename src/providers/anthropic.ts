@@ -48,9 +48,9 @@ export class AnthropicProvider implements LLMProvider {
   ): Promise<ChatResult> {
     // Anthropic separates the system and only accepts user/assistant roles.
     const systemTexts: string[] = [];
-    const msgs: any[] = [];
+    const msgs: Record<string, unknown>[] = [];
     // Consecutive tool results are grouped into a single 'user' message.
-    let pendingToolResults: any[] = [];
+    let pendingToolResults: Record<string, unknown>[] = [];
     const flushTools = () => {
       if (pendingToolResults.length) {
         msgs.push({ role: 'user', content: pendingToolResults });
@@ -68,10 +68,10 @@ export class AnthropicProvider implements LLMProvider {
       }
       flushTools();
       if (m.role === 'assistant' && m.toolCalls?.length) {
-        const content: any[] = [];
+        const content: Record<string, unknown>[] = [];
         if (m.content) content.push({ type: 'text', text: m.content });
         for (const tc of m.toolCalls) {
-          let input: any = {};
+          let input: unknown = {};
           try { input = JSON.parse(safeToolArgs(tc.arguments)); } catch { /* empty */ }
           content.push({ type: 'tool_use', id: tc.id, name: tc.name, input });
         }
@@ -81,7 +81,7 @@ export class AnthropicProvider implements LLMProvider {
       const imgs = imageAttachments(m);
       const docs = documentAttachments(m);
       if (imgs.length || docs.length) {
-        const content: any[] = [];
+        const content: Record<string, unknown>[] = [];
         if (m.content) content.push({ type: 'text', text: m.content });
         for (const a of imgs) {
           content.push({ type: 'image', source: { type: 'base64', media_type: a.mime, data: a.data } });
@@ -99,7 +99,7 @@ export class AnthropicProvider implements LLMProvider {
     // max_tokens is MANDATORY in the API.
     const maxTokens = p.maxTokens && p.maxTokens > 0 ? p.maxTokens : 4096;
 
-    const body: any = { model, messages: msgs, max_tokens: maxTokens, stream: true };
+    const body: Record<string, unknown> = { model, messages: msgs, max_tokens: maxTokens, stream: true };
     if (systemTexts.length) body.system = systemTexts.join('\n\n');
     if (p.stop && p.stop.length) body.stop_sequences = p.stop;
     if (p.tools && p.tools.length) {

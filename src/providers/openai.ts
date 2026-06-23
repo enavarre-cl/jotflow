@@ -1,4 +1,4 @@
-import { ChatMessage, ChatResult, GenImage, GenerationParams, LLMProvider, ModelInfo, StreamCallbacks } from './types';
+import { ChatMessage, ChatResult, GenImage, GenerationParams, LLMProvider, ModelInfo, StreamCallbacks, TokenUsage } from './types';
 import { createThinkSplitter } from './think';
 import { postStream } from './request';
 import { httpFetch } from '../http';
@@ -6,11 +6,11 @@ import { readLines, safeToolArgs } from './stream';
 import { imageAttachments, documentAttachments, dataUrl, isImageOutputModel, parseDataUrl } from './multimodal';
 
 /** Message content in OpenAI format: string, or array of parts if there are images/documents. */
-function openAIContent(m: ChatMessage): any {
+function openAIContent(m: ChatMessage): string | Record<string, unknown>[] | undefined {
   const imgs = imageAttachments(m);
   const docs = documentAttachments(m);
   if (!imgs.length && !docs.length) return m.content;
-  const parts: any[] = [];
+  const parts: Record<string, unknown>[] = [];
   if (m.content) parts.push({ type: 'text', text: m.content });
   for (const a of imgs) parts.push({ type: 'image_url', image_url: { url: dataUrl(a) } });
   for (const a of docs) parts.push({ type: 'file', file: { filename: a.name, file_data: dataUrl(a) } });
@@ -18,11 +18,11 @@ function openAIContent(m: ChatMessage): any {
 }
 
 /** Converts a ChatMessage to the OpenAI API message format. */
-function openAIMessage(m: ChatMessage): any {
+function openAIMessage(m: ChatMessage): Record<string, unknown> {
   if (m.role === 'tool') {
     return { role: 'tool', tool_call_id: m.toolCallId, content: m.content };
   }
-  const msg: any = { role: m.role, content: openAIContent(m) };
+  const msg: Record<string, unknown> = { role: m.role, content: openAIContent(m) };
   if (m.toolCalls?.length) {
     msg.tool_calls = m.toolCalls.map((tc) => ({
       id: tc.id,
@@ -104,7 +104,7 @@ export class OpenAIProvider implements LLMProvider {
     // and skip tools, which they don't support.
     const imageOut = isImageOutputModel(model);
 
-    const body: any = {
+    const body: Record<string, unknown> = {
       model,
       messages: messages.map(openAIMessage),
       stream: true,
@@ -147,7 +147,7 @@ export class OpenAIProvider implements LLMProvider {
     let answer = '';
     let thinking = '';
     const toolAcc: Record<string, { id: string; name: string; arguments: string }> = {};
-    let usage: any;
+    let usage: TokenUsage | undefined;
     const images: GenImage[] = [];
     const imageSeen = new Set<string>(); // dedup (a frame may repeat in delta + final message)
     const collectImages = (arr: any): void => {

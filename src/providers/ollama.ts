@@ -1,4 +1,4 @@
-import { ChatMessage, ChatResult, GenerationParams, LLMProvider, ModelInfo, StreamCallbacks } from './types';
+import { ChatMessage, ChatResult, GenerationParams, LLMProvider, ModelInfo, StreamCallbacks, TokenUsage } from './types';
 import { createThinkSplitter } from './think';
 import { postStream } from './request';
 import { httpFetch } from '../http';
@@ -54,7 +54,7 @@ export class OllamaProvider implements LLMProvider {
     p: GenerationParams,
     cb: StreamCallbacks
   ): Promise<ChatResult> {
-    const options: any = {};
+    const options: Record<string, unknown> = {};
     if (p.temperature !== undefined) options.temperature = p.temperature;
     if (p.maxTokens !== undefined && p.maxTokens > 0) options.num_predict = p.maxTokens;
     if (p.topK !== undefined) options.top_k = p.topK;
@@ -68,18 +68,18 @@ export class OllamaProvider implements LLMProvider {
     if (p.contextLength !== undefined) options.num_ctx = p.contextLength;
     if (p.stop && p.stop.length) options.stop = p.stop;
 
-    const reqBody: any = {
+    const reqBody: Record<string, unknown> = {
       model,
       messages: messages.map((m) => {
         if (m.role === 'tool') {
           return { role: 'tool', content: m.content, tool_name: m.toolName };
         }
-        const out: any = { role: m.role, content: m.content };
+        const out: Record<string, unknown> = { role: m.role, content: m.content };
         const imgs = imageAttachments(m);
         if (imgs.length) out.images = imgs.map((a) => a.data);
         if (m.toolCalls?.length) {
           out.tool_calls = m.toolCalls.map((tc) => {
-            let args: any = {};
+            let args: unknown = {};
             try { args = JSON.parse(safeToolArgs(tc.arguments)); } catch { /* empty */ }
             return { function: { name: tc.name, arguments: args } };
           });
@@ -106,7 +106,7 @@ export class OllamaProvider implements LLMProvider {
     let answer = '';
     let thinking = '';
     const toolCalls: { id: string; name: string; arguments: string }[] = [];
-    let usage: any;
+    let usage: TokenUsage | undefined;
     const splitter = createThinkSplitter(
       (a) => { answer += a; cb.onDelta(a); },
       (th) => { thinking += th; cb.onReasoning?.(th); }

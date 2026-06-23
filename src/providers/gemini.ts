@@ -1,4 +1,4 @@
-import { ChatMessage, ChatResult, GenImage, GenerationParams, LLMProvider, ModelInfo, StreamCallbacks } from './types';
+import { ChatMessage, ChatResult, GenImage, GenerationParams, LLMProvider, ModelInfo, StreamCallbacks, TokenUsage } from './types';
 import { postStream } from './request';
 import { httpFetch } from '../http';
 import { readLines } from './stream';
@@ -51,9 +51,9 @@ export class GeminiProvider implements LLMProvider {
   ): Promise<ChatResult> {
     // Gemini separates system into systemInstruction and uses user/model roles.
     const systemTexts: string[] = [];
-    const contents: any[] = [];
+    const contents: Record<string, unknown>[] = [];
     // Consecutive tool responses are grouped into a single 'user' content.
-    let pendingFnResponses: any[] = [];
+    let pendingFnResponses: Record<string, unknown>[] = [];
     const flushFns = () => {
       if (pendingFnResponses.length) {
         contents.push({ role: 'user', parts: pendingFnResponses });
@@ -75,7 +75,7 @@ export class GeminiProvider implements LLMProvider {
       }
       flushFns();
       if (m.role === 'assistant' && m.toolCalls?.length) {
-        const parts: any[] = [];
+        const parts: Record<string, unknown>[] = [];
         if (m.content) parts.push({ text: m.content });
         for (const tc of m.toolCalls) {
           let args: any = {};
@@ -85,7 +85,7 @@ export class GeminiProvider implements LLMProvider {
         contents.push({ role: 'model', parts });
         continue;
       }
-      const parts: any[] = [];
+      const parts: Record<string, unknown>[] = [];
       if (m.content) parts.push({ text: m.content });
       for (const a of imageAttachments(m)) {
         parts.push({ inline_data: { mime_type: a.mime, data: a.data } });
@@ -114,7 +114,7 @@ export class GeminiProvider implements LLMProvider {
     if (p.thinking && !imageOut) generationConfig.thinkingConfig = { includeThoughts: true };
     if (imageOut) generationConfig.responseModalities = ['TEXT', 'IMAGE'];
 
-    const body: any = { contents, generationConfig };
+    const body: Record<string, unknown> = { contents, generationConfig };
     if (systemTexts.length) {
       body.systemInstruction = { parts: [{ text: systemTexts.join('\n\n') }] };
     }
@@ -137,7 +137,7 @@ export class GeminiProvider implements LLMProvider {
     }, 'Gemini');
     let answer = '';
     let thinking = '';
-    let usage: any;
+    let usage: TokenUsage | undefined;
     const toolCalls: { id: string; name: string; arguments: string }[] = [];
     const images: GenImage[] = [];
 

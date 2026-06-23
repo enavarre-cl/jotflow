@@ -10,4 +10,3 @@ media/icon-parley-full*.png
 # secretos locales (API keys) — NUNCA commitear
 parley-settings.local.json
 *.local.json
-.webview-backup/
