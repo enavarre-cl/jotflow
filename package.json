@@ -449,6 +449,11 @@
             "type": "string",
             "default": "http://localhost:11434",
             "markdownDescription": "%config.ollama.baseUrl.desc%"
+          },
+          "jotflow.ollama.apiKey": {
+            "type": "string",
+            "default": "",
+            "markdownDescription": "%config.ollama.apiKey.desc%"
           }
         }
       },

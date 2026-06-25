@@ -67,6 +67,7 @@
   "config.models.source.enum.ollama": "Biblioteca do Ollama (ollama.com)",
   "config.models.source.enum.huggingface": "Hugging Face (GGUF)",
   "config.ollama.baseUrl.desc": "URL base do servidor Ollama.",
+  "config.ollama.apiKey.desc": "Chave de API para os modelos **cloud** do Ollama (ex.: `kimi-k2.7-code:cloud`). Autentica o servidor gerenciado com ollama.com. Prefira o comando **Set API Key**, que a guarda criptografada no SecretStorage.",
   "config.ollama.managed.desc": "Gerencia um servidor Ollama embutido: baixa seu próprio binário do Ollama e o executa localmente (independente de qualquer instalação do sistema). Quando desativado, usa a URL base abaixo.",
   "config.ollama.maxConcurrentDownloads.desc": "Quantos modelos podem ser baixados ao mesmo tempo (o restante fica na fila). 2 por padrão.",
   "config.ollama.modelsPath.desc": "Pasta opcional para armazenar os modelos baixados (define `OLLAMA_MODELS`). Vazio = o padrão do Ollama.",

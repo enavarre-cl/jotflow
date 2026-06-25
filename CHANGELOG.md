@@ -13,6 +13,9 @@ All notable changes to Jotflow. Format based on
   downloading never depends on that. New module `src/ollama/library.ts` with unit-tested pure parsers.
   - **Cloud-only models** (e.g. `glm-5.2`) are flagged with a ☁ Cloud badge and, on open, say they
     run on Ollama Cloud instead of showing an empty/broken download picker.
+  - **Ollama Cloud API key**: new `jotflow.ollama.apiKey` setting (and an *Ollama (cloud)* entry in
+    the **Set API Key** command → SecretStorage). It is passed as `OLLAMA_API_KEY` to the managed
+    server so it can proxy cloud models (`model:cloud`). Restart the Ollama server to apply.
   - **Richer detail pages**: the model's overview, headline metadata (**Context window**, parameter
     **Size**) and full README are scraped from its library page and the README is converted to
     Markdown — so headings, bullet lists and the **benchmarks table** render properly (previously a
