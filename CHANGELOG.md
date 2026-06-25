@@ -5,6 +5,11 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-06-24
+
+### Changed
+- New extension icon (`media/icon.png`). No code or behavior changes.
+
 ## [2.0.0] - 2026-06-24
 
 Rebranding from **Parley** to **Jotflow**, prompted by a brand collision with the existing
