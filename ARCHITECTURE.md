@@ -400,9 +400,13 @@ graph LR
 
 ## 11. Build & packaging
 
-- TypeScript (`src/**` → `out/**`) via `tsc`; ESLint; tests via `node:test` (`src/test/`). `src/`
-  carries **no `any`-as-a-type** — external JSON / VS Code boundaries use `unknown` with explicit
-  narrowing or a named `Raw*`/response interface, so a typo on a parsed shape is a compile error.
+- TypeScript (`src/**` → `out/**`) via `tsc` (type-check + `node:test`); ESLint. `src/` carries
+  **no `any`-as-a-type** — external JSON / VS Code boundaries use `unknown` with explicit narrowing
+  or a named `Raw*`/response interface, so a typo on a parsed shape is a compile error.
+- The shipped extension host is **bundled with esbuild** (`npm run bundle` → a single minified
+  `dist/extension.js`, `main`; `undici` inlined, `vscode` external). `.vscodeignore` then excludes
+  `out/`, `node_modules/` and `src/` from the `.vsix` (T12 — a small, fast package; no unbundled-files
+  warning). The webview (`media/**`) is **not** bundled (see §8).
 - Webview assets (`media/**`) ship as-is — the chat UI is hand-authored **ES modules** served
   via `asWebviewUri` (no bundler). They are type-checked (not emitted) by `media/jsconfig.json`
   (`checkJs` + `globals.d.ts`); run `npx tsc -p media/jsconfig.json` to validate the graph.

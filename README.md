@@ -168,8 +168,9 @@ Jotflow is **MIT** licensed. It bundles or downloads third‑party components un
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for the release history. **2.1.1** is a security hardening pass that
-clears all GitHub CodeQL alerts (DOM-allowlist HTML sanitizer, Blob-URL images, etc.). **2.1.0** makes
+See [CHANGELOG.md](CHANGELOG.md) for the release history. **2.1.2** bundles the extension host with
+esbuild for a smaller, faster package. **2.1.1** is a security hardening pass that clears all GitHub
+CodeQL alerts (DOM-allowlist HTML sanitizer, Blob-URL images, etc.). **2.1.0** makes
 the model explorer source configurable (Ollama library by default, Hugging Face optional), adds Ollama
 **cloud** models (register + API key) and richer detail pages (README + Context/Size). **2.0.0** is the rebrand from
 Parley to Jotflow (no functional change; the major bump reflects the new identity and extension ID). The

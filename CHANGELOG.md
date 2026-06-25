@@ -5,6 +5,15 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-06-25
+
+### Build
+- **Bundle the extension host with esbuild** (T12) into a single minified `dist/extension.js`
+  (`undici` inlined, `vscode` external). The packaged `.vsix` drops from **270 files (188 JS) to
+  74 (33 JS)** — clearing the vsce "should bundle your extension" warning; `node_modules`/`out` are
+  no longer shipped. `tsc` still emits `out/` for type-checking and `node:test`. The webview
+  (`media/**`) stays **unbundled by design** (served per-module via `asWebviewUri`).
+
 ## [2.1.1] - 2026-06-25
 
 ### Security
