@@ -5,6 +5,25 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-06-25
+
+### Security
+- **Resolved all GitHub CodeQL code-scanning alerts** (7 distinct queries) found on the 2.1.0 code,
+  with real fixes (no dismissals):
+  - **Model-browser README sanitizer is now a DOM allowlist** (parses into an inert `<template>`,
+    keeps only known-safe tags/attributes) instead of a regex denylist
+    (`js/incomplete-multi-character-sanitization`); the strict CSP remains the backstop.
+  - **Attachment images render via a `Blob` object URL** (`URL.createObjectURL`, revoked on load),
+    not a `data:` URL concatenated from the `mime`/base64, so untrusted bytes never reach a URL sink
+    (`js/xss-through-dom`, `js/client-side-unvalidated-url-redirection`); `mime` validated as `image/…`.
+  - `web_fetch` HTML→text: decode `&amp;` **last** (`js/double-escaping`) and match `</script>` /
+    `</style>` with trailing junk (`js/bad-tag-filter`).
+  - Escape capability labels before `innerHTML` (`js/xss`); actually escape U+2028/U+2029 in the
+    inline-script JSON (was a no-op `replace` — `js/identity-replacement`).
+- **Documented the findings as forward guidance**: BEST-PRACTICES.md rules **U7–U12 / W7** (DOM
+  allowlist, Blob URLs, entity-decode order, no identity replaces, escape-before-innerHTML, CodeQL
+  as a gate) and a new **"Static analysis (CodeQL)"** section in SECURITY.md.
+
 ## [2.1.0] - 2026-06-25
 
 ### Added
