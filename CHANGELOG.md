@@ -11,8 +11,10 @@ All notable changes to Jotflow. Format based on
   Set it to `huggingface` to keep browsing Hugging Face GGUF repos as before. Ollama has no public
   search API, so the library is read from ollama.com's first-party HTML (stable `x-test-*` markup);
   downloading never depends on that. New module `src/ollama/library.ts` with unit-tested pure parsers.
-  - **Cloud-only models** (e.g. `glm-5.2`) are flagged with a ☁ Cloud badge and, on open, say they
-    run on Ollama Cloud instead of showing an empty/broken download picker.
+  - **Cloud-only models** (e.g. `glm-5.2`) are flagged with a ☁ Cloud badge and offer a **Register
+    for cloud use** action (pulls the tiny `name:cloud` manifest stub — no weights — so the model
+    appears in your list and can be picked in chat; inference runs on Ollama Cloud) instead of an
+    empty/broken download picker.
   - **Ollama Cloud API key**: new `jotflow.ollama.apiKey` setting (and an *Ollama (cloud)* entry in
     the **Set API Key** command → SecretStorage). It is passed as `OLLAMA_API_KEY` to the managed
     server so it can proxy cloud models (`model:cloud`). Restart the Ollama server to apply.

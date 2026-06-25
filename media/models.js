@@ -124,10 +124,15 @@
       `<span class="mb-meta"><b>${esc(t('Format'))}</b> GGUF</span>` +
       `</div>`;
     let opts;
-    if (!files.length) {
-      opts = `<div class="mb-muted">${esc(m.cloud
-        ? t('This model runs on Ollama Cloud — there is no local download.')
-        : t('No downloadable files found'))}</div>`;
+    if (m.cloud) {
+      // Cloud models aren't downloaded; registering pulls a tiny manifest stub (`name:cloud`) so the
+      // model shows up locally and can be picked in chat — inference still runs on Ollama Cloud.
+      opts = `<div class="mb-opt-picker">
+        <button class="mb-dl" id="mb-cloud-reg">${esc(t('Register for cloud use'))}</button>
+      </div>
+      <div class="mb-reco">${esc(t('Runs on Ollama Cloud. Registering adds it to your model list (no weights downloaded); needs an Ollama API key — see Set API Key.'))}</div>`;
+    } else if (!files.length) {
+      opts = `<div class="mb-muted">${esc(t('No downloadable files found'))}</div>`;
     } else {
       const def = pickDefaultQuant(files);
       const anyRisky = files.some((f) => f.pullable === false);
@@ -173,6 +178,9 @@
       const f = files[Number(sel && sel.value)] || files[0];
       vscode.postMessage({ type: 'pull', id, quant: f.quant, size: f.size, pullable: f.pullable !== false, path: f.path, shards: f.shards || [] });
     });
+    const reg = $('mb-cloud-reg');
+    if (reg) reg.addEventListener('click', () =>
+      vscode.postMessage({ type: 'pull', id, quant: 'cloud', size: 0, pullable: true, path: '', shards: [] }));
     renderDetailProgress(id); // shows progress ONLY if this model has a download
   }
 
