@@ -97,7 +97,8 @@ graph LR
     oassets["assets.ts (pinned binary)"]
     oreg["registry.ts (/api)"]
     ocat["catalog.ts (HF search)"]
-    olib["library.ts (Ollama search)"]
+    olib["library.ts (Ollama search/scrape)"]
+    ohtml["htmlMarkdown.ts (HTML→MD, pure)"]
     odl["downloads.ts (queue)"]
     oparse["parse.ts (pure)"]
   end
@@ -132,8 +133,10 @@ graph LR
 ```
 
 **Pure, testable cores** (no VS Code / no network, unit-tested in `src/test/`):
-`chatHelpers.ts`, `findReplace.ts`, `ollama/parse.ts`, `ollama/assets.ts`,
-`providers/multimodal.ts`, `net.ts`, `audio.ts`, `download.ts`.
+`chatHelpers.ts`, `findReplace.ts`, `ollama/parse.ts`, `ollama/assets.ts`, `ollama/htmlMarkdown.ts`,
+`providers/multimodal.ts`, `net.ts`, `audio.ts`, `download.ts`. The HTML-scraping parsers in
+`ollama/library.ts` (search / tags / cloud / README) are pure and unit-tested too; only its fetch
+wrappers touch the network.
 
 ---
 
@@ -298,6 +301,12 @@ Downloads run as a native `ollama pull` (with resume) or, when Hugging Face can'
 `ollama create` (import mode). A pre-flight probe and a runtime "400" backstop route broken
 manifests to import automatically.
 
+`library.ts` scrapes ollama.com (search / tags / model page — no public JSON API) for the Ollama
+catalog: downloadable quants, **cloud variants** (`name:cloud`, registered via a stub `pull`), and
+the model's README (converted to Markdown by `htmlMarkdown.ts`) + Context/Size. **Cloud models**
+run remotely; the managed server proxies them once authenticated — the Ollama API key
+(`jotflow.ollama.apiKey` / SecretStorage) is passed to `ollama serve` as `OLLAMA_API_KEY`.
+
 ### Piper (neural TTS)
 
 `piper/manager.ts` bootstraps a self-contained Python (or system Python), a venv with
@@ -334,8 +343,9 @@ broken imports / undefined identifiers).
 Other webviews stay single classic scripts: **model browser** (`models.js` + `models.css`),
 and the small **voices / dictionary / compare** panels. Spell-check runs **in the webview**
 (`nspell` + bundled hunspell dictionaries in `media/dict`), drawing a wavy underline on a
-mirror "backdrop" behind the textarea. The model browser does the HF search **through the
-host** (it has no network).
+mirror "backdrop" behind the textarea. The model browser does its catalog search (Ollama library or
+Hugging Face) and its README rendering **through the host** (it has no network); scraped content is
+escaped / `sanitizeHtml`'d under the panel's strict CSP.
 
 ---
 
@@ -369,7 +379,11 @@ graph LR
 - **Path confinement**: filesystem tools resolve and `realpath`-check every path against the
   workspace roots (blocks `../` and symlink escape).
 - **API keys** live in **SecretStorage** (encrypted), entered via a masked input command, not
-  in plaintext settings.
+  in plaintext settings. The **Ollama Cloud** key reaches only the loopback managed server as
+  `OLLAMA_API_KEY`; it is never sent over the network by the extension nor exposed to the webview.
+- **Scraped catalog content** (ollama.com search/tags/README) is fetched over a fixed host
+  (encoded paths → no SSRF), HTML-escaped, and the README is tag-stripped → re-rendered →
+  `sanitizeHtml`'d, with the model browser's strict CSP as the backstop.
 - **Network** goes through `http.ts` (respects `http.proxy` / env proxy). Binaries (Ollama,
   Piper, voices, GGUFs) are **SHA-256 verified** before use (fail-closed). `web_fetch` blocks SSRF:
   it validates the resolved IP **at connect time** (anti DNS-rebinding) and re-checks the host at

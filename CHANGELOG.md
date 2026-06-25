@@ -5,6 +5,8 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-06-25
+
 ### Added
 - **Model explorer source is now configurable** (`jotflow.models.source`). The default is the
   **Ollama library** (ollama.com) — searched and downloaded natively via `ollama pull name:tag`.
