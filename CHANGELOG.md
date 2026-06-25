@@ -5,6 +5,13 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+### Added
+- **Model explorer source is now configurable** (`jotflow.models.source`). The default is the
+  **Ollama library** (ollama.com) — searched and downloaded natively via `ollama pull name:tag`.
+  Set it to `huggingface` to keep browsing Hugging Face GGUF repos as before. Ollama has no public
+  search API, so the library is read from ollama.com's first-party HTML (stable `x-test-*` markup);
+  downloading never depends on that. New module `src/ollama/library.ts` with unit-tested pure parsers.
+
 ## [2.0.2] - 2026-06-25
 
 ### Fixed

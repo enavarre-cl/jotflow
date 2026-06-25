@@ -20,6 +20,7 @@ export interface CatalogModel {
   domain: string;      // LLM / VLM / Embeddings…
   official: boolean;   // author is in the official orgs list
   capabilities: ModelCapabilities; // estimated (D3: truth arrives from /api/show after download)
+  description?: string; // short blurb (Ollama library only; HF has none in the search payload)
 }
 
 /** Extra model info (architecture and exact params), from the individual HF endpoint. */

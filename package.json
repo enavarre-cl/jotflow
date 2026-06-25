@@ -387,6 +387,19 @@
             "type": "number",
             "default": 2048,
             "description": "%config.maxTokens.desc%"
+          },
+          "jotflow.models.source": {
+            "type": "string",
+            "enum": [
+              "ollama",
+              "huggingface"
+            ],
+            "enumDescriptions": [
+              "%config.models.source.enum.ollama%",
+              "%config.models.source.enum.huggingface%"
+            ],
+            "default": "ollama",
+            "description": "%config.models.source.desc%"
           }
         }
       },

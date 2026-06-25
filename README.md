@@ -14,8 +14,8 @@ management and neural text‑to‑speech without leaving the editor.
   Anthropic Claude, switchable per conversation.
 - 📄 **Conversations as files** — each chat is a human‑readable `.chat` (config + history) you can
   diff, version and share.
-- 🦙 **Models, batteries included** — manage an embedded Ollama and browse/download GGUF models
-  from Hugging Face without installing anything.
+- 🦙 **Models, batteries included** — manage an embedded Ollama and browse/download models from the
+  **Ollama library** (default) or **Hugging Face** GGUF repos, without installing anything.
 - 🔧 **Agentic tools** — workspace filesystem + MCP servers (function calling) on every backend.
 - 🗣️ **Read aloud** — system voices or self‑contained neural **Piper** TTS.
 
@@ -32,8 +32,9 @@ management and neural text‑to‑speech without leaving the editor.
 - 📊 **Markdown + Mermaid** in chat bubbles: ` ```mermaid ` blocks render as diagrams with a
   GitHub‑style viewer — pan pad, zoom (pinch / `Ctrl`·`⌘`+wheel), **fullscreen** and **copy‑as‑image**.
   The library is lazy‑loaded only when a chat contains a diagram.
-- 🦙 **Embedded Ollama** + **Hugging Face GGUF explorer**: capability badges, quantization options
-  and **downloads with progress** (shows size and free disk space first; retry/cancel).
+- 🦙 **Embedded Ollama** + **model explorer** (Ollama library by default, Hugging Face GGUF optional
+  via `jotflow.models.source`): capability badges, quantization options and **downloads with
+  progress** (shows size and free disk space first; retry/cancel).
 - 🔧 **Tools (function calling)**: native **workspace filesystem** + **MCP servers** — agentic loop.
 - 🗣️ **Read aloud (TTS)**: system voices (Web Speech) or neural **Piper** (local, managed daemon).
 - 🔎 **Find & replace in chat** (`Ctrl/Cmd+F` find · `Ctrl/Cmd+H` replace), 🔍 **zoom** (`Alt`/`Option` + wheel), 🌳 **fork**,

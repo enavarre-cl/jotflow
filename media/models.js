@@ -1,4 +1,5 @@
-// Model explorer (webview). Searches Hugging Face and downloads via Ollama.
+// Model explorer (webview). Searches the configured source (Ollama library or Hugging Face) and
+// downloads via Ollama. The host maps both sources onto the same model/file shapes used here.
 (function () {
   const vscode = acquireVsCodeApi();
   const t = (s) => (window.LangI18n ? window.LangI18n.t(s) : s);
@@ -80,7 +81,7 @@
     for (const m of vis) {
       const row = document.createElement('div');
       row.className = 'mb-row' + (m.id === selected ? ' sel' : '');
-      const desc = pipelineLabel(m.pipeline);
+      const desc = m.description || pipelineLabel(m.pipeline);
       const off = m.official ? ` <span class="mb-verified" title="${esc(t('Official'))}">✓</span>` : '';
       const params = m.params ? `${esc(m.params)} · ` : '';
       const ago = fmtAgo(m.updated);
@@ -111,7 +112,7 @@
   function renderDetail(id, files, readme, info, modelOverride) {
     const m = modelOverride || results.find((r) => r.id === id) || { id, capabilities: {}, pipeline: '', params: '', domain: '', official: false };
     info = info || {};
-    const desc = pipelineLabel(m.pipeline);
+    const desc = m.description || pipelineLabel(m.pipeline);
     const params = info.params || m.params || '';
     const metaRow =
       `<div class="mb-meta-row">` +

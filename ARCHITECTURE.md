@@ -34,7 +34,7 @@ graph TB
 
   subgraph Web["Webviews — sandbox (media/**)"]
     MAIN["app/main.js (ES modules)<br/>chat editor UI"]
-    MODELS["models.js<br/>HF model browser"]
+    MODELS["models.js<br/>model browser (Ollama/HF)"]
     SPELL["spell.js + spell-engine.js<br/>nspell"]
     I18N["i18n.js<br/>UI translation"]
   end
@@ -97,6 +97,7 @@ graph LR
     oassets["assets.ts (pinned binary)"]
     oreg["registry.ts (/api)"]
     ocat["catalog.ts (HF search)"]
+    olib["library.ts (Ollama search)"]
     odl["downloads.ts (queue)"]
     oparse["parse.ts (pure)"]
   end
@@ -276,8 +277,9 @@ graph TD
 
 `ollama/manager.ts` can run a **self-contained Ollama**: it downloads the pinned binary
 (`assets.ts`, SHA-256 verified) into globalStorage and runs `serve` on a free port —
-independent of any system install. `registry.ts` talks to `/api/*`; `catalog.ts` searches
-Hugging Face for GGUF models; `downloads.ts` is a persistent, observable download queue.
+independent of any system install. `registry.ts` talks to `/api/*`; the model explorer searches
+the **Ollama library** (`library.ts`, default) or **Hugging Face** GGUF (`catalog.ts`), selected by
+`jotflow.models.source`; `downloads.ts` is a persistent, observable download queue.
 
 ```mermaid
 stateDiagram-v2
