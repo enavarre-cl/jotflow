@@ -5,6 +5,19 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-06-25
+
+### Fixed
+- **Critical: the managed Ollama would not start** ("Ollama: Invalid IP address: undefined"). The
+  SSRF-hardened DNS `lookup` (used to download the Ollama binary and by `web_fetch`) ignored Node's
+  `all` flag and always returned a single address. On Node 20+ (VS Code's runtime, with
+  `autoSelectFamily`/happy-eyeballs) Node calls the custom `lookup` with `all:true` and expects an
+  **array** — handing it a bare string made Node read `.address` off it and throw
+  `ERR_INVALID_IP_ADDRESS`, aborting the binary download so the server never came up. The lookup now
+  returns the shape Node asked for via a new pure, unit-tested `safeLookupResult` (`net.ts`), which
+  keeps the **strict** anti-SSRF/anti-rebinding policy: the host is refused if any resolved address
+  is private/internal/metadata.
+
 ## [2.0.1] - 2026-06-24
 
 ### Changed
