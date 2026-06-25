@@ -83,10 +83,11 @@
       row.className = 'mb-row' + (m.id === selected ? ' sel' : '');
       const desc = m.description || pipelineLabel(m.pipeline);
       const off = m.official ? ` <span class="mb-verified" title="${esc(t('Official'))}">✓</span>` : '';
+      const cloud = m.cloud ? ` <span class="mb-cloud" title="${esc(t('Runs on Ollama Cloud (no local download)'))}">☁ ${esc(t('Cloud'))}</span>` : '';
       const params = m.params ? `${esc(m.params)} · ` : '';
       const ago = fmtAgo(m.updated);
       row.innerHTML =
-        `<div class="mb-row-title">${esc(m.id)}${off}</div>` +
+        `<div class="mb-row-title">${esc(m.id)}${off}${cloud}</div>` +
         (desc ? `<div class="mb-row-desc">${esc(desc)}</div>` : '') +
         `<div class="mb-row-meta">${params}⬇ ${fmtNum(m.downloads)} · ★ ${fmtNum(m.likes)}${ago ? ` · ${esc(ago)}` : ''}</div>` +
         capBadges(m.capabilities, true);
@@ -123,7 +124,9 @@
       `</div>`;
     let opts;
     if (!files.length) {
-      opts = `<div class="mb-muted">${esc(t('No GGUF files found'))}</div>`;
+      opts = `<div class="mb-muted">${esc(m.cloud
+        ? t('This model runs on Ollama Cloud — there is no local download.')
+        : t('No downloadable files found'))}</div>`;
     } else {
       const def = pickDefaultQuant(files);
       const anyRisky = files.some((f) => f.pullable === false);

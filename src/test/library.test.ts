@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import {
   parseSize, parsePulls, decodeEntities, parseSearchHtml, parseTagsHtml, dedupeTags,
+  metaDescription, htmlToText, extractReadme,
 } from '../ollama/library';
 
 // --- numeric/text helpers ---
@@ -43,17 +44,19 @@ const SEARCH_HTML = `
   </a>
 </li>
 <li x-test-model class="flex">
-  <a href="/library/gemma3" class="group w-full">
-    <div class="flex flex-col mb-1" title="gemma3">
-      <h2><span x-test-search-response-title>gemma3</span></h2>
-      <p class="max-w-lg break-words text-neutral-800 text-md">Gemma 3 models.</p>
+  <a href="/library/glm-5.2" class="group w-full">
+    <div class="flex flex-col mb-1" title="glm-5.2">
+      <h2><span x-test-search-response-title>glm-5.2</span></h2>
+      <p class="max-w-lg break-words text-neutral-800 text-md">GLM 5.2.</p>
     </div>
+    <span x-test-capability class="x">tools</span>
+    <span class="font-medium text-cyan-500 sm:text-[13px]">cloud</span>
     <span x-test-pull-count>5M</span>
   </a>
 </li>
 </ul>`;
 
-test('parseSearchHtml extracts name, description, capabilities and pulls', () => {
+test('parseSearchHtml extracts name, description, capabilities, pulls and the cloud flag', () => {
   const out = parseSearchHtml(SEARCH_HTML);
   assert.strictEqual(out.length, 2);
   assert.deepStrictEqual(out[0], {
@@ -61,9 +64,10 @@ test('parseSearchHtml extracts name, description, capabilities and pulls', () =>
     description: "Qwen3 is Alibaba's family.",
     capabilities: ['vision', 'tools', 'thinking'],
     pulls: 31_300_000,
+    cloud: false,
   });
   assert.deepStrictEqual(out[1], {
-    name: 'gemma3', description: 'Gemma 3 models.', capabilities: [], pulls: 5_000_000,
+    name: 'glm-5.2', description: 'GLM 5.2.', capabilities: ['tools'], pulls: 5_000_000, cloud: true,
   });
 });
 
@@ -96,4 +100,38 @@ test('dedupeTags collapses aliases by digest, prefers a specific tag over latest
   // sorted ascending by size → 0.5b first, then the 845… digest (latest/7b alias)
   assert.strictEqual(out[0].tag, '0.5b');
   assert.strictEqual(out[1].tag, '7b'); // 'latest' dropped in favour of the explicit '7b'
+});
+
+// --- model page (overview + README) ---
+const MODEL_HTML = `
+<head><meta name="description" content="Qwen2.5 supports up to 128K tokens &amp; multilingual." /></head>
+<body>
+  <div id="readme">
+    <div><h2>Readme</h2></div>
+    <div id="display" class="prose">
+      <h1>Qwen2.5</h1>
+      <p>A family of <strong>instruction-tuned</strong> models.</p>
+      <ul><li>0.5B to 72B</li><li>128K context</li></ul>
+      <div class="note">Run with <code>ollama run qwen2.5</code></div>
+    </div>
+  </div>
+  <div id="footer">unrelated</div>
+</body>`;
+
+test('metaDescription reads and decodes the page overview', () => {
+  assert.strictEqual(metaDescription(MODEL_HTML), 'Qwen2.5 supports up to 128K tokens & multilingual.');
+});
+
+test('extractReadme pulls the #display content (balancing nested divs) as readable text', () => {
+  const md = extractReadme(MODEL_HTML);
+  assert.match(md, /Qwen2\.5/);
+  assert.match(md, /instruction-tuned/);
+  assert.match(md, /- 0\.5B to 72B/);
+  assert.match(md, /ollama run qwen2\.5/);
+  assert.doesNotMatch(md, /unrelated/);   // stopped at the balanced close, didn't bleed into the footer
+  assert.doesNotMatch(md, /</);           // all tags stripped
+});
+
+test('htmlToText keeps line breaks/bullets and strips tags', () => {
+  assert.strictEqual(htmlToText('<p>Hi</p><ul><li>a</li><li>b</li></ul>'), 'Hi\n\n- a\n- b');
 });

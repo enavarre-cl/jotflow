@@ -11,6 +11,10 @@ All notable changes to Jotflow. Format based on
   Set it to `huggingface` to keep browsing Hugging Face GGUF repos as before. Ollama has no public
   search API, so the library is read from ollama.com's first-party HTML (stable `x-test-*` markup);
   downloading never depends on that. New module `src/ollama/library.ts` with unit-tested pure parsers.
+  - **Cloud-only models** (e.g. `glm-5.2`) are flagged with a ☁ Cloud badge and, on open, say they
+    run on Ollama Cloud instead of showing an empty/broken download picker.
+  - **Richer detail pages**: the model's overview and full README are scraped from its library page
+    (previously only a one-line blurb was shown).
 
 ## [2.0.2] - 2026-06-25
 

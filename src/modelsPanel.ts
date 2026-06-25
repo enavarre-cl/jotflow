@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import { OllamaManager } from './ollama/manager';
 import { searchHF, modelFiles, readme, modelInfo, fetchModel, ollamaPullViable, OFFICIAL_ORG_NAMES, CatalogModel, SortMode } from './ollama/catalog';
-import { searchOllama, ollamaModelFiles, OllamaSort } from './ollama/library';
+import { searchOllama, ollamaModelFiles, ollamaModelCard, OllamaSort } from './ollama/library';
 import { hfPullRef, formatBytes } from './ollama/parse';
 
 /** Where the model browser searches/downloads from. `ollama` is the default. */
@@ -170,10 +170,13 @@ export class ModelsPanel {
         case 'detail': {
           const detailId = msg.id ?? '';
           if (this.source() === 'ollama') {
-            const files = await ollamaModelFiles(detailId).catch(() => []);
-            const md = msg.model?.description ?? '';
-            const card: ModelCard = { model: msg.model, files, readme: md, info: { arch: '', params: '' } };
-            if (files.length) this.cards.save(detailId, card);
+            const [files, overview] = await Promise.all([
+              ollamaModelFiles(detailId).catch(() => []),
+              ollamaModelCard(detailId).catch(() => ({ description: '', readme: '' })),
+            ]);
+            const readme = overview.readme || overview.description || msg.model?.description || '';
+            const card: ModelCard = { model: msg.model, files, readme, info: { arch: '', params: '' } };
+            this.cards.save(detailId, card);
             this.post({ type: 'detail', id: msg.id, ...card });
             break;
           }

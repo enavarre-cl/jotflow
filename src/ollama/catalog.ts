@@ -21,6 +21,7 @@ export interface CatalogModel {
   official: boolean;   // author is in the official orgs list
   capabilities: ModelCapabilities; // estimated (D3: truth arrives from /api/show after download)
   description?: string; // short blurb (Ollama library only; HF has none in the search payload)
+  cloud?: boolean;      // Ollama cloud-only model (no local download); never set for HF
 }
 
 /** Extra model info (architecture and exact params), from the individual HF endpoint. */

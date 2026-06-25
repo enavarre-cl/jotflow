@@ -28,6 +28,13 @@ export interface OllamaSearchEntry {
   description: string;
   capabilities: string[];
   pulls: number;
+  cloud: boolean; // cloud-only model (runs on Ollama Cloud; no local GGUF to download)
+}
+
+/** Overview + README of a model, scraped from its library page. */
+export interface OllamaCard {
+  description: string;
+  readme: string;
 }
 
 /** A single downloadable tag of a library model. */
@@ -71,9 +78,46 @@ export function parseSearchHtml(html: string): OllamaSearchEntry[] {
     const description = /<p class="max-w-lg[^"]*">([^<]*)<\/p>/.exec(block)?.[1] ?? '';
     const capabilities = [...block.matchAll(/x-test-capability[^>]*>([^<]+)</g)].map((m) => m[1].trim());
     const pulls = /x-test-pull-count>([^<]+)</.exec(block)?.[1] ?? '';
-    out.push({ name, description: decodeEntities(description).trim(), capabilities, pulls: parsePulls(pulls) });
+    // Cloud-only models carry a cyan "cloud" pill instead of downloadable tags.
+    const cloud = /text-cyan-\d+[^>]*>\s*cloud\s*</i.test(block);
+    out.push({ name, description: decodeEntities(description).trim(), capabilities, pulls: parsePulls(pulls), cloud });
   }
   return out;
+}
+
+/** PURE. The model page's one-paragraph overview (its `<meta name="description">`). */
+export function metaDescription(html: string): string {
+  const m = /<meta name="description" content="([^"]*)"/.exec(html);
+  return m ? decodeEntities(m[1]).trim() : '';
+}
+
+/** PURE. Flattens a scraped HTML fragment to readable plain text (keeps line breaks and list bullets). */
+export function htmlToText(fragment: string): string {
+  const text = fragment
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, '')
+    .replace(/<li[^>]*>/gi, '\n- ')
+    .replace(/<\/(p|div|h[1-6]|tr|pre|blockquote|ul|ol|table)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '');
+  return decodeEntities(text).replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/** PURE. Extracts the README text from a model page's `#display` container (balances nested divs). */
+export function extractReadme(html: string): string {
+  const anchor = html.indexOf('id="display"');
+  if (anchor < 0) return '';
+  const open = html.indexOf('>', anchor);
+  if (open < 0) return '';
+  let depth = 1;
+  const re = /<\/?div\b[^>]*>/gi;
+  re.lastIndex = open + 1;
+  let m: RegExpExecArray | null;
+  let end = html.length;
+  while ((m = re.exec(html)) !== null) {
+    depth += m[0].startsWith('</') ? -1 : 1;
+    if (depth === 0) { end = m.index; break; }
+  }
+  return htmlToText(html.slice(open + 1, end));
 }
 
 // Each tag row links to /library/{name}:{tag} and, shortly after, prints `<digest> • <size> • …`.
@@ -132,6 +176,7 @@ function toCatalogModel(e: OllamaSearchEntry): CatalogModel {
     official: true,
     capabilities,
     description: e.description,
+    cloud: e.cloud,
   };
 }
 
@@ -171,4 +216,12 @@ export async function ollamaModelFiles(name: string, signal?: AbortSignal): Prom
   if (!res.ok) throw new Error(`Ollama tags HTTP ${res.status}`);
   return dedupeTags(parseTagsHtml(await res.text()))
     .map((t): ModelFile => ({ path: '', size: t.bytes, quant: t.tag, pullable: true }));
+}
+
+/** Fetches a model's overview + README from its ollama.com/library page. */
+export async function ollamaModelCard(name: string, signal?: AbortSignal): Promise<OllamaCard> {
+  const res = await fetchWithTimeout(`${OLLAMA}/library/${encodeURIComponent(name)}`, signal);
+  if (!res.ok) throw new Error(`Ollama model HTTP ${res.status}`);
+  const html = await res.text();
+  return { description: metaDescription(html), readme: extractReadme(html) };
 }
