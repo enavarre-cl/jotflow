@@ -308,6 +308,31 @@ sanitiza el markdown; escapa nombres (`escapeHtml`) antes de interpolar.
 que tocan URLs/rutas.
 **U6.** **Dependencias auditadas** (`npm audit`/Snyk); fija binarios externos por hash/pin.
 
+> Las reglas U7–U11 nacen de hallazgos reales de **CodeQL** (ver §W7); cada una cita su query.
+
+**U7.** **Sanea HTML con *allowlist* de DOM, no *denylist* con regex.** Para insertar HTML
+potencialmente no confiable (READMEs, contenido scrapeado), parséalo en un `<template>` **inerte**
+(su contenido no se renderiza y los `<script>` no se ejecutan) y conserva **solo** tags/atributos de
+una lista blanca (ver `sanitizeHtml` en `models.js`). Un `.replace()` que borra `<script>`/`on*` es
+**incompleto**: un payload partido o anidado (`<scr<script>ipt>`) se reensambla en una sola pasada
+(CodeQL `js/incomplete-multi-character-sanitization`). Si *de verdad* no hay alternativa a regex,
+hazlo en **bucle hasta punto fijo** (`do { p=s; s=s.replace(re,'') } while (s!==p)`).
+**U8.** **Filtros de tags tolerantes** (no single-shot ingenuo). Un cierre como `</script>` debe
+matchear también `</script >` / `</script\tbar>`: usa `</script[^>]*>` (CodeQL `js/bad-tag-filter`).
+**U9.** **Bytes no confiables → media por `Blob` + `URL.createObjectURL`**, nunca por `data:` +
+concatenación. Meter `mime`/base64 de un adjunto en `img.src = 'data:'+mime+';base64,'+data` lleva
+datos no confiables a un *sink* de URL (CodeQL `js/xss-through-dom`, `js/client-side-unvalidated-url-redirection`).
+Decodifica a `Blob`, usa el `blob:` que **genera el navegador**, valida el `mime` (`image/…`) y
+**revoca** la object URL en `load`/`error` (ver `setImageSrc` en `core/dom.js`).
+**U10.** **Orden de decodificación de entidades: `&amp;` al final.** Decodificar `&amp;`→`&` antes que
+`&lt;`/`&gt;` produce doble-unescape (`&amp;lt;` → `<` en vez de `&lt;`) (CodeQL `js/double-escaping`).
+**U11.** **Sin reemplazos identidad / no-op.** `.replace(/X/g, 'X')` reemplaza algo por sí mismo
+(CodeQL `js/identity-replacement`); para **escapar** un carácter a un literal usa la secuencia escapada
+(p. ej. U+2028/U+2029 → `'\\u2028'`/`'\\u2029'` para embeber JSON en un `<script>` inline), no el carácter.
+**U12.** **`innerHTML` solo con HTML que tú generas; escapa toda interpolación** — incluso etiquetas
+"de confianza" (traducciones `t()`, nombres): `escapeHtml()` antes de concatenar (CodeQL `js/xss`).
+Mejor aún, construye nodos DOM (`textContent`).
+
 ## V. Testing
 
 **V1.** **`node:test`** sobre la **lógica pura** (parsing, transforms, helpers): máximo retorno.
@@ -328,6 +353,12 @@ explícita en `.gitignore`/`.vscodeignore`. Git es el backup; nada de código co
 convierten en issues o se borran.
 **W5.** **`CHANGELOG.md` por release**, `version` bumpeada antes de publicar.
 **W6.** **README/ARCHITECTURE reflejan la realidad**, no aspiraciones.
+**W7.** **GitHub CodeQL (code scanning)** corre en cada push a `master`; mantén sus *security
+queries* de JS/TS en **0 alertas** (`js/xss`, `js/xss-through-dom`, `js/client-side-unvalidated-url-redirection`,
+`js/bad-tag-filter`, `js/double-escaping`, `js/incomplete-multi-character-sanitization`,
+`js/identity-replacement`…). Ante un falso positivo legítimo, **refactoriza al patrón que CodeQL
+reconoce** (allowlist DOM, `Blob` URL, guard con `RegExp.test`) antes de recurrir a un *dismiss*
+justificado. Las reglas U7–U12 codifican los hallazgos ya vistos.
 
 ## X. Checklist pre-commit
 
@@ -343,7 +374,9 @@ A ojo:
 - [ ] ¿Vista nueva modularizada (render / store / eventos / protocolo / estilos)?
 - [ ] ¿`any` nuevo fuera de la capa de JSON externo? → `unknown` + narrowing.
 - [ ] ¿Promesa nueva `await`eada o `void`? ¿I/O con timeout y `AbortSignal`?
-- [ ] ¿`innerHTML` con datos del modelo? → `textContent`/sanitiza.
+- [ ] ¿`innerHTML` con datos del modelo? → `textContent`/sanitiza (allowlist DOM, no regex; U7/U12).
+- [ ] ¿HTML/URL no confiable? → sin denylist regex, sin `data:`+concat (usa `Blob`/`createObjectURL`),
+  `&amp;` se decodifica al final, sin `.replace` identidad (U7–U11). ¿CodeQL en 0 (W7)?
 - [ ] ¿Selector CSS con ID o `!important` reactivo? → refactor.
 - [ ] ¿Nuevo `%nls%` en todos los bundles? ¿Comando declarado + en disposables?
 - [ ] ¿Secreto nuevo en `SecretStorage`?

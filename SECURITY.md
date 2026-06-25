@@ -39,7 +39,8 @@ files) or repositories opened without trust.
 | **Supply chain (Ollama binary)** | **Pinned** SHA256 for each GitHub release asset (from the `digest` field); verified **before extract/exec**. **Fails closed** (asset without a hash → error). |
 | **Managed Ollama server** | Listens **only on `127.0.0.1`** (ephemeral or configured port); child process is managed and killed on deactivation. The API is not exposed to the network. |
 | **Model download (HF/Ollama)** | Search and `pull` go through `httpFetch` (inherited proxy + anti-SSRF). Size and free space are shown and **confirmation** is requested before downloading. |
-| **Untrusted model-catalog content (ollama.com)** | The Ollama model explorer scrapes ollama.com (search / tags / model pages) over a **fixed host** with `encodeURIComponent`-encoded path & query (no user-controlled host → no SSRF), via `httpFetch` with a timeout. Scraped names/metadata are **HTML-escaped** before display; the README is **tag-stripped → re-rendered to a limited Markdown/HTML subset → `sanitizeHtml`** (drops `script`/`style`/`iframe`/`on*`/`javascript:`), with the panel's strict CSP (`script-src 'nonce-…'`, no `unsafe-inline`) as the backstop. |
+| **Untrusted model-catalog content (ollama.com)** | The Ollama model explorer scrapes ollama.com (search / tags / model pages) over a **fixed host** with `encodeURIComponent`-encoded path & query (no user-controlled host → no SSRF), via `httpFetch` with a timeout. Scraped names/metadata are **HTML-escaped** before display; the README is **tag-stripped → re-rendered to a limited Markdown/HTML subset → a DOM-allowlist `sanitizeHtml`** (parsed in an inert `<template>`; only known-safe tags/attributes kept — not a regex denylist), with the panel's strict CSP (`script-src 'nonce-…'`, no `unsafe-inline`) as the backstop. |
+| **Untrusted attachment bytes (images)** | Image attachments (base64 from a possibly hand-crafted `.attach`) are shown via a **`Blob` object URL** (`URL.createObjectURL`, revoked on load), **not** a `data:` URL built by concatenating the `mime`/`data` — so untrusted bytes never reach a URL string sink. The `mime` is validated as `image/…` and the payload as base64 (`setImageSrc`). |
 | **Supply chain (pip package)** | `piper-tts` is installed at a **pinned version** (`==1.4.2`); pip verifies its hash against the PyPI index (immutable files). |
 
 ## Accepted residual risks
@@ -57,6 +58,20 @@ files) or repositories opened without trust.
   this tool. The **pinned version** already covers the realistic vectors.
 - **Uncurated Piper voices.** If the user points `jotflow.tts.piperModel` at their own `.onnx`,
   its checksum is not verified (it is the user's choice).
+
+## Static analysis (CodeQL)
+
+The repository runs **GitHub CodeQL code scanning** on every push to `master`; its JS/TS security
+queries are kept at **0 open alerts**. Recurring pitfalls it surfaced — and the patterns we use to
+avoid them in new code — are codified as rules **U7–U12 / W7** in [BEST-PRACTICES.md](BEST-PRACTICES.md):
+
+- **`js/incomplete-multi-character-sanitization`** → sanitize untrusted HTML with a **DOM allowlist**
+  (inert `<template>` + safe tag/attr list), not a single-pass regex denylist.
+- **`js/bad-tag-filter`** → tag-matching regexes tolerate whitespace/attributes in close tags (`</script[^>]*>`).
+- **`js/xss-through-dom` / `js/client-side-unvalidated-url-redirection`** → untrusted bytes reach media
+  via a **`Blob` object URL**, never a concatenated `data:` URL.
+- **`js/double-escaping`** → decode `&amp;` **last**. **`js/identity-replacement`** → no `replace(X, X)`;
+  escape to a literal (`'\\u2028'`). **`js/xss`** → `escapeHtml()` every value before `innerHTML`.
 
 ## How to report a vulnerability
 
