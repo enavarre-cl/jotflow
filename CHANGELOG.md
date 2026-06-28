@@ -5,6 +5,15 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.6.14] - 2026-06-28
+
+### Added
+- **Settings point users to the API-key command.** After 2.6.13 removed the `*.apiKey` settings, a user
+  looking in Settings for the key field found nothing. Each provider's **Base URL** setting now carries
+  a short note (in all 6 languages) with a clickable **[set it securely](command:jotflow.setApiKey)**
+  link, telling them to use the **Set API Key** command (stored encrypted in SecretStorage). Closes the
+  discoverability gap.
+
 ## [2.6.13] - 2026-06-28
 
 ### Security
