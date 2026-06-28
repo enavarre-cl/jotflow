@@ -5,6 +5,27 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.3.4] - 2026-06-27
+
+### Fixed
+- **Deleting a message that has an image no longer makes the scroll jump back several messages.** On a
+  delete/merge re-render the view is re-anchored to the top-most visible message, but image
+  attachments load asynchronously with no reserved height (`width:100%; height:auto`) — an image
+  *above* the viewport growing after the re-anchor pushed everything down, so the view jumped to
+  earlier messages. The anchor is now re-pinned as each image settles (load/error), until the user
+  scrolls away.
+
+### Internal
+- **Webview type-check back to 0 errors.** `media/ui/notifications.js` hangs `_span`/`_fill` refs on
+  the TTS-progress element; it is now cast to `any` at creation (same idiom as `message.js`), clearing
+  two `checkJs` errors so `tsc -p media/jsconfig.json` is clean again (the 1.5.0 promise).
+
+### CI
+- **The release pipeline (re)creates the `v<version>` tag on the published commit**, right before the
+  two deploy jobs: if the tag already exists it is deleted and re-pointed at the release commit, so it
+  always tracks what was shipped. Scoped `contents: write` on that one `tag` job; top-level stays
+  read-only.
+
 ## [2.3.3] - 2026-06-27
 
 ### Added

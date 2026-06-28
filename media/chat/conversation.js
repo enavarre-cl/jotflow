@@ -313,21 +313,44 @@ export function renderConversation() {
     }
     // The entire history was summarized (no recent messages): divider at the end.
     if (!lastN && upTo > 0 && !summaryShown) summaryDivider();
-    // Restore scroll: to the bottom if already there; otherwise to where it was.
+    // Restore scroll: to the bottom if already there; otherwise to where it was. Wrapped in a closure
+    // so it can be re-run as late-loading content settles (see below).
     suppressScroll = false;
-    if (atBottom) {
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-    } else if (scrollAnchor) {
-      // Re-pin the anchor message to the same on-screen offset it had before the rebuild.
-      const a = messagesEl.querySelector('.msg[data-msg-index="' + scrollAnchor.index + '"]');
-      if (a) {
-        const viewTop = messagesEl.getBoundingClientRect().top;
-        messagesEl.scrollTop += (a.getBoundingClientRect().top - viewTop) - scrollAnchor.offset;
+    const restoreScroll = () => {
+      if (atBottom) {
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      } else if (scrollAnchor) {
+        // Re-pin the anchor message to the same on-screen offset it had before the rebuild.
+        const a = messagesEl.querySelector('.msg[data-msg-index="' + scrollAnchor.index + '"]');
+        if (a) {
+          const viewTop = messagesEl.getBoundingClientRect().top;
+          messagesEl.scrollTop += (a.getBoundingClientRect().top - viewTop) - scrollAnchor.offset;
+        } else {
+          messagesEl.scrollTop = prevTop;
+        }
       } else {
         messagesEl.scrollTop = prevTop;
       }
-    } else {
-      messagesEl.scrollTop = prevTop;
+    };
+    restoreScroll();
+    // Image attachments load asynchronously with no reserved height (width:100%; height:auto), so one
+    // above the viewport growing after the rebuild would push the anchor down and the view would jump
+    // back several messages. Re-pin as each image settles (load or error), until the user scrolls away.
+    const pendingImgs = /** @type {HTMLImageElement[]} */ (
+      [...messagesEl.querySelectorAll('.msg-attachments img')]).filter((im) => !im.complete);
+    if (pendingImgs.length) {
+      let remaining = pendingImgs.length;
+      const release = () => { remaining = 0; messagesEl.removeEventListener('wheel', release); };
+      messagesEl.addEventListener('wheel', release, { passive: true }); // user took over → stop re-pinning
+      const settled = (repin) => {
+        if (!remaining) return;
+        if (repin) restoreScroll();
+        if (--remaining === 0) messagesEl.removeEventListener('wheel', release);
+      };
+      for (const im of pendingImgs) {
+        im.addEventListener('load', () => settled(true), { once: true });
+        im.addEventListener('error', () => settled(false), { once: true });
+      }
     }
     // If the search bar is open, re-highlight over the freshly rebuilt DOM.
     refreshFind();

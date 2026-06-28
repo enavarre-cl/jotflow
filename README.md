@@ -190,10 +190,11 @@ Jotflow is **MIT** licensed. It bundles or downloads third‑party components un
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for the release history. **2.3.3** makes the **Reasoning / Tools**
-panels remember their open/closed state **per conversation** (so they stop popping back open while
-streaming), fixes the previously‑dead `jotflow.tts.chatterboxExaggeration` setting, and shows chat
-images at full bubble width. **2.3.x** adds **Chatterbox** voice‑cloning
+See [CHANGELOG.md](CHANGELOG.md) for the release history. **2.3.4** fixes a scroll jump when deleting
+a message that has an image. **2.3.3** makes the **Reasoning / Tools** panels remember their
+open/closed state **per conversation** (so they stop popping back open while streaming), fixes the
+previously‑dead `jotflow.tts.chatterboxExaggeration` setting, and shows chat images at full bubble
+width. **2.3.x** adds **Chatterbox** voice‑cloning
 TTS (clone a voice from a YouTube fragment; fast 4‑bit MLX on Apple Silicon), an **engines management
 panel** (progress + RAM), and `@file` mentions while editing a message. **2.1.2** bundles the extension host with
 esbuild for a smaller, faster package. **2.1.1** is a security hardening pass that clears all GitHub
