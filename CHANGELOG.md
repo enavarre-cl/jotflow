@@ -5,6 +5,12 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+### Docs
+- **All docs/comments now in English** (the repo's source language, per BEST-PRACTICES A8).
+  Translated `BEST-PRACTICES.md` (the only Spanish doc, ~140 rules) and the `media/conversation.css`
+  header comment. README/CHANGELOG/CONTRIBUTING/ARCHITECTURE/SECURITY and all `.ts` comments were
+  already English.
+
 ## [2.6.14] - 2026-06-28
 
 ### Added

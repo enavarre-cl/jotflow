@@ -1,397 +1,395 @@
 # Best Practices — TypeScript / JavaScript / CSS & VS Code Extensions
 
-> Estándar de desarrollo para **Jotflow**. Catálogo exhaustivo de reglas con ejemplos
-> correcto (✓) / incorrecto (✗). Cada regla es accionable y verificable en review.
+> Development standard for **Jotflow**. An exhaustive catalogue of rules with
+> correct (✓) / incorrect (✗) examples. Each rule is actionable and verifiable in review.
 >
-> **Fuentes sintetizadas:** TypeScript Handbook (*Do's & Don'ts*), MDN (*JS Code Style*,
+> **Synthesized sources:** TypeScript Handbook (*Do's & Don'ts*), MDN (*JS Code Style*,
 > *Organizing CSS*), andredesousa (*typescript-best-practices*, *css-best-practices*),
 > stevekwan (*JS best-practices*), Snyk (*Modern VS Code Extension Development*), W3Schools.
-> Adaptadas a este proyecto: extensión VS Code, host Node + webview **ambos TypeScript bundleados con
+> Adapted to this project: VS Code extension, Node host + webview **both TypeScript bundled with
 > esbuild**, host TS `strict`, i18n.
 >
-> Convención: el inglés es el idioma fuente del **código**; los ejemplos van en inglés.
-> Relacionados: [ARCHITECTURE.md](ARCHITECTURE.md), [CONTRIBUTING.md](CONTRIBUTING.md),
+> Convention: English is the source language of the **code**; examples are in English.
+> Related: [ARCHITECTURE.md](ARCHITECTURE.md), [CONTRIBUTING.md](CONTRIBUTING.md),
 > [SECURITY.md](SECURITY.md).
 
-**Índice** — A.[Nombres](#a-nombres) · B.[Variables](#b-variables-y-declaración) ·
-C.[TS tipos](#c-typescript--sistema-de-tipos) · D.[TS declaraciones](#d-typescript--declaraciones-handbook) ·
-E.[Funciones](#e-funciones) · F.[Funcional/inmutabilidad](#f-programación-funcional-e-inmutabilidad) ·
-G.[Control de flujo](#g-control-de-flujo) · H.[Sintaxis moderna](#h-sintaxis-y-operadores) ·
-I.[Objetos y arrays](#i-objetos-y-arrays) · J.[Comentarios](#j-comentarios) ·
-K.[Async](#k-async--promesas) · L.[Errores](#l-errores) · M.[Módulos/tamaño](#m-módulos-organización-y-tamaño) ·
-N.[Vistas/webview](#n-vistas--webview) · O.[CSS nombres](#o-css--metodología-y-nombres) ·
-P.[CSS selectores](#p-css--selectores-y-especificidad) · Q.[CSS valores](#q-css--valores-y-unidades) ·
-R.[CSS organización](#r-css--organización-y-build) · S.[Rendimiento](#s-rendimiento) ·
-T.[Extensiones VS Code](#t-extensiones-vs-code) · U.[Seguridad](#u-seguridad) ·
-V.[Testing](#v-testing) · W.[Tooling/repo](#w-tooling-build-e-higiene-de-repo) ·
-X.[Checklist](#x-checklist-pre-commit).
+**Index** — A.[Naming](#a-naming) · B.[Variables](#b-variables-and-declaration) ·
+C.[TS types](#c-typescript--type-system) · D.[TS declarations](#d-typescript--declarations-handbook) ·
+E.[Functions](#e-functions) · F.[Functional/immutability](#f-functional-programming-and-immutability) ·
+G.[Control flow](#g-control-flow) · H.[Modern syntax](#h-syntax-and-operators) ·
+I.[Objects and arrays](#i-objects-and-arrays) · J.[Comments](#j-comments) ·
+K.[Async](#k-async--promises) · L.[Errors](#l-errors) · M.[Modules/size](#m-modules-organization-and-size) ·
+N.[Views/webview](#n-views--webview) · O.[CSS names](#o-css--methodology-and-names) ·
+P.[CSS selectors](#p-css--selectors-and-specificity) · Q.[CSS values](#q-css--values-and-units) ·
+R.[CSS organization](#r-css--organization-and-build) · S.[Performance](#s-performance) ·
+T.[VS Code extensions](#t-vs-code-extensions) · U.[Security](#u-security) ·
+V.[Testing](#v-testing) · W.[Tooling/repo](#w-tooling-build-and-repo-hygiene) ·
+X.[Checklist](#x-pre-commit-checklist).
 
 ---
 
-## A. Nombres
+## A. Naming
 
-**A1.** Nombres **descriptivos y pronunciables**; mídelos por lo que explican, no por lo que
-ahorran. `elapsedDays`, no `d`/`x1`/`fe2`.
-**A2.** **`camelCase`** variables/funciones · **`PascalCase`** tipos/clases/interfaces ·
-**`UPPER_SNAKE`** constantes de módulo.
-**A3.** **Booleanos con prefijo** `is`/`has`/`should`/`can`: `isLoading`, `hasApiKey`, `canRetry`.
-**A4.** **Sin notación húngara** ni sufijos de tipo: `name`, no `nameStr`; `users`, no `userArray`.
-**A5.** **Colecciones en plural**: `cars`, no `carList`.
-**A6.** **Nombres de 3–10 chars**, semánticos y del dominio real; evita posesivos (`myCar`).
-**A7.** **Sin magic numbers/strings**: dales nombre. `const MAX_RETRIES = 3`.
-**A8.** **Inglés siempre** (idioma fuente del código).
+**A1.** **Descriptive and pronounceable** names; measure them by what they explain, not what they
+save. `elapsedDays`, not `d`/`x1`/`fe2`.
+**A2.** **`camelCase`** variables/functions · **`PascalCase`** types/classes/interfaces ·
+**`UPPER_SNAKE`** module constants.
+**A3.** **Booleans prefixed** with `is`/`has`/`should`/`can`: `isLoading`, `hasApiKey`, `canRetry`.
+**A4.** **No Hungarian notation** or type suffixes: `name`, not `nameStr`; `users`, not `userArray`.
+**A5.** **Collections plural**: `cars`, not `carList`.
+**A6.** **Names of 3–10 chars**, semantic and from the real domain; avoid possessives (`myCar`).
+**A7.** **No magic numbers/strings**: name them. `const MAX_RETRIES = 3`.
+**A8.** **Always English** (the source language of the code).
 
-## B. Variables y declaración
+## B. Variables and declaration
 
-**B1.** **`const` por defecto**, `let` solo si reasignas, **nunca `var`** (scope de función, mutable).
-**B2.** **Una variable por línea**; no encadenes `let a, b, c`.
-**B3.** **Inicializa al declarar**; evita estados `undefined`.
-**B4.** **Defaults de parámetro** para opcionales: `function log(msg = '') {}`.
-**B5.** **Declara cerca del primer uso** (no obligatorio "todo arriba", pero agrupa lo relacionado).
+**B1.** **`const` by default**, `let` only if you reassign, **never `var`** (function scope, mutable).
+**B2.** **One variable per line**; don't chain `let a, b, c`.
+**B3.** **Initialize on declaration**; avoid `undefined` states.
+**B4.** **Parameter defaults** for optionals: `function log(msg = '') {}`.
+**B5.** **Declare near first use** (not "everything at the top," but group what's related).
 
-## C. TypeScript — sistema de tipos
+## C. TypeScript — type system
 
-**C1.** **`strict` activado** y sin aflojar por archivo: incluye `noImplicitAny`, `strictNullChecks`,
+**C1.** **`strict` on** and never loosened per file: includes `noImplicitAny`, `strictNullChecks`,
 `noImplicitReturns`, `forceConsistentCasingInFileNames`.
-**C2.** **`any` es deuda → usa `unknown` + narrowing.** `any` apaga el chequeo completo.
+**C2.** **`any` is debt → use `unknown` + narrowing.** `any` turns off all checking.
 ```ts
 function h(x: any) { x.foo(); }                       // ✗
 function h(x: unknown) { if (typeof x === 'string') x.toLowerCase(); }  // ✓
 ```
-**C3.** Único `any` tolerado: **JSON dinámico de APIs externas**, aislado en la capa de parse/adaptador.
-**C4.** **Tipa fronteras, infiere lo interno**: anota parámetros, retornos públicos e interfaces; no
-locales que TS deduce.
-**C5.** **Uniones de literales** para conjuntos cerrados: `type Status = 'pending' | 'approved'`.
-Una fuente de verdad que además genera el type-guard.
-**C6.** **Uniones discriminadas** con campo literal (`kind`/`type`): `{ kind:'text'; text } | { kind:'image'; url }`.
-**C7.** **`readonly` por defecto** en lo inmutable; `readonly T[]` en parámetros no modificados.
-**C8.** **Utility types** en vez de duplicar: `Partial`, `Readonly`, `Pick`, `Omit`, `Record`.
-**C9.** **`interface` para formas/contratos**, **`type` para uniones/tuplas/alias**.
-**C10.** No fragmentes interfaces agresivamente si oscurece la estructura.
+**C3.** Only tolerated `any`: **dynamic JSON from external APIs**, isolated in the parse/adapter layer.
+**C4.** **Type boundaries, infer internals**: annotate parameters, public returns and interfaces; not
+locals TS deduces.
+**C5.** **Literal unions** for closed sets: `type Status = 'pending' | 'approved'`.
+A single source of truth that also generates the type guard.
+**C6.** **Discriminated unions** with a literal field (`kind`/`type`): `{ kind:'text'; text } | { kind:'image'; url }`.
+**C7.** **`readonly` by default** on the immutable; `readonly T[]` on unmodified parameters.
+**C8.** **Utility types** instead of duplicating: `Partial`, `Readonly`, `Pick`, `Omit`, `Record`.
+**C9.** **`interface` for shapes/contracts**, **`type` for unions/tuples/aliases**.
+**C10.** Don't fragment interfaces aggressively if it obscures the structure.
 
-## D. TypeScript — declaraciones (Handbook)
+## D. TypeScript — declarations (Handbook)
 
-**D1.** **Primitivos en minúscula**, nunca boxed: `string`/`number`/`boolean`, no `String`/`Number`.
-Usa `object`, no `Object`.
-**D2.** **Genéricos que usan su parámetro**; un `<T>` que no aparece en la firma no infiere nada.
-**D3.** **Callbacks ignorados → retorno `void`** (no `any`): impide usar el valor por accidente.
-**D4.** **No hagas opcionales los parámetros de un callback** que siempre recibirán valor.
-**D5.** **No multipliques sobrecargas por aridad de callback**: declara la aridad máxima una vez.
-**D6.** **Parámetros opcionales en vez de sobrecargas que solo añaden cola**:
-`diff(a: string, b?: string)`, no tres firmas.
-**D7.** **Uniones en vez de sobrecargas que difieren en un tipo**: `utcOffset(b: number | string)`.
-**D8.** **Ordena sobrecargas de específica → general** (TS toma la primera que encaja).
+**D1.** **Lowercase primitives**, never boxed: `string`/`number`/`boolean`, not `String`/`Number`.
+Use `object`, not `Object`.
+**D2.** **Generics that use their parameter**; a `<T>` not appearing in the signature infers nothing.
+**D3.** **Ignored callbacks → `void` return** (not `any`): prevents accidentally using the value.
+**D4.** **Don't make optional the parameters of a callback** that will always receive a value.
+**D5.** **Don't multiply overloads by callback arity**: declare the max arity once.
+**D6.** **Optional parameters instead of overloads that only add a tail**:
+`diff(a: string, b?: string)`, not three signatures.
+**D7.** **Unions instead of overloads differing in one type**: `utcOffset(b: number | string)`.
+**D8.** **Order overloads specific → general** (TS takes the first that fits).
 
-## E. Funciones
+## E. Functions
 
-**E1.** **Pequeñas y de una sola responsabilidad** (~5–15 líneas); si el nombre pide un "y", son dos.
-**E2.** **≤3 parámetros**; más → objeto de opciones: `createUser(opts)`.
-**E3.** **Sin flag booleano** que bifurca el cuerpo → parte en `getUser` / `getUserWithProfile`.
-**E4.** **Poca anidación**: *early return*, extrae sub-funciones; no pirámides de `if`.
-**E5.** **Declaración de función** sobre expresión asignada a `const` para funciones nombradas.
-**E6.** **Arrow para callbacks** (sin `this` propio); **retorno implícito** si es expresión:
+**E1.** **Small and single-responsibility** (~5–15 lines); if the name needs an "and," it's two.
+**E2.** **≤3 parameters**; more → an options object: `createUser(opts)`.
+**E3.** **No boolean flag** that branches the body → split into `getUser` / `getUserWithProfile`.
+**E4.** **Little nesting**: *early return*, extract sub-functions; no pyramids of `if`.
+**E5.** **Function declaration** over an expression assigned to `const` for named functions.
+**E6.** **Arrow for callbacks** (no own `this`); **implicit return** if it's an expression:
 `list.map(x => x.id)`.
 
-## F. Programación funcional e inmutabilidad
+## F. Functional programming and immutability
 
-**F1.** **Prefiere funciones puras**: salida determinada solo por la entrada, sin efectos.
-**F2.** **Inmutabilidad sobre estado compartido**: crea nuevo, no mutes.
+**F1.** **Prefer pure functions**: output determined only by input, no side effects.
+**F2.** **Immutability over shared state**: create new, don't mutate.
 ```ts
-arr.push(x);                 // ✗ si arr es compartido
+arr.push(x);                 // ✗ if arr is shared
 const next = [...arr, x];    // ✓     const upd = { ...user, age: 41 };
 ```
-(Mutar un array local que tú creaste es correcto y más rápido — la regla es para estado compartido.)
-**F3.** **Centraliza los efectos** (I/O, red, DOM, estado global); el resto puro.
-**F4.** **Evita estado global**; inyecta dependencias por argumento, sin singletons ocultos.
-**F5.** **Métodos de array** (`map`/`filter`/`reduce`) sobre bucles cuando gana legibilidad.
-**F6.** **Reemplaza condicionales complejos** por polimorfismo / estrategia cuando se repiten.
-**F7.** **Iteradores/generadores** para datos en streaming o evaluación perezosa.
+(Mutating a local array you created is correct and faster — the rule is for shared state.)
+**F3.** **Centralize effects** (I/O, network, DOM, global state); keep the rest pure.
+**F4.** **Avoid global state**; inject dependencies by argument, no hidden singletons.
+**F5.** **Array methods** (`map`/`filter`/`reduce`) over loops when readability wins.
+**F6.** **Replace complex conditionals** with polymorphism / strategy when they repeat.
+**F7.** **Iterators/generators** for streaming data or lazy evaluation.
 
-## G. Control de flujo
+## G. Control flow
 
-**G1.** **`switch`: `return` por caso** (sin `break`), **`default` al final**, **llaves `{}`** si
-declaras variables en un caso.
-**G2.** **Siempre incluye `default`** en `switch` para atrapar valores inesperados.
-**G3.** **No `else` tras `return`**: aplana el camino feliz.
-**G4.** **Ternario para asignación simple**: `const x = cond ? 1 : 2`.
-**G5.** **Llaves siempre** en control de flujo, aun con una sola sentencia.
+**G1.** **`switch`: `return` per case** (no `break`), **`default` last**, **braces `{}`** if
+you declare variables in a case.
+**G2.** **Always include `default`** in a `switch` to catch unexpected values.
+**G3.** **No `else` after `return`**: flatten the happy path.
+**G4.** **Ternary for simple assignment**: `const x = cond ? 1 : 2`.
+**G5.** **Always braces** in control flow, even with a single statement.
 
-## H. Sintaxis y operadores
+## H. Syntax and operators
 
-**H1.** **`===`/`!==` siempre** (excepción documentada: `== null` con comentario).
-**H2.** **Atajo booleano** `if (x)` / `if (!x)`, no `if (x === true)`.
-**H3.** **Template literals**, no concatenación: `` `Hi ${name}` ``.
-**H4.** **Destructuring y spread**: `const { id } = user`, `const [a, ...rest] = list`.
-**H5.** **Conversión explícita**: `String(v)` / `Number(v)`, no `'' + v` ni `+v`.
-**H6.** **Sin `eval`, `with`, `void` como operador** ni modificar prototipos nativos
+**H1.** **`===`/`!==` always** (documented exception: `== null` with a comment).
+**H2.** **Boolean shorthand** `if (x)` / `if (!x)`, not `if (x === true)`.
+**H3.** **Template literals**, not concatenation: `` `Hi ${name}` ``.
+**H4.** **Destructuring and spread**: `const { id } = user`, `const [a, ...rest] = list`.
+**H5.** **Explicit conversion**: `String(v)` / `Number(v)`, not `'' + v` or `+v`.
+**H6.** **No `eval`, `with`, `void` as an operator** nor modifying native prototypes
 (`Array.prototype`, `Object`, `Date`…).
 
-## I. Objetos y arrays
+## I. Objects and arrays
 
-**I1.** **Literales, no constructores**: `[]` / `{}`, no `new Array()` / `new Object()`.
-**I2.** **`push()` para añadir**, no `arr[arr.length] = x`.
-**I3.** **Object shorthand**: `return { name, age }`; **método corto**: `{ foo() {} }`.
-**I4.** **`class` ES** para tipos de objeto con comportamiento.
-**I5.** **`Object.hasOwn(o, k)`**, no `o.hasOwnProperty(k)` (deprecado).
-**I6.** **`for...of` / `forEach`** sobre `for (;;)` salvo hot-path medido; **nunca `for...in`** sobre
-arrays/strings. `const` en `for...of`, `let` en bucles con índice.
+**I1.** **Literals, not constructors**: `[]` / `{}`, not `new Array()` / `new Object()`.
+**I2.** **`push()` to append**, not `arr[arr.length] = x`.
+**I3.** **Object shorthand**: `return { name, age }`; **short method**: `{ foo() {} }`.
+**I4.** **ES `class`** for object types with behavior.
+**I5.** **`Object.hasOwn(o, k)`**, not `o.hasOwnProperty(k)` (deprecated).
+**I6.** **`for...of` / `forEach`** over `for (;;)` unless a measured hot path; **never `for...in`** over
+arrays/strings. `const` in `for...of`, `let` in indexed loops.
 
-## J. Comentarios
+## J. Comments
 
-**J1.** **Comenta la intención y el "por qué"**, no lo obvio que ya dice el código.
-**J2.** **Nada de código comentado**: para eso está git; bórralo.
-**J3.** **Comentarios solo los necesarios** ("as much as needed, not more").
-**J4.** **JSDoc en la API pública** (parámetros, retorno, throws) cuando aporta.
+**J1.** **Comment intent and the "why"**, not the obvious that the code already says.
+**J2.** **No commented-out code**: that's what git is for; delete it.
+**J3.** **Only the comments you need** ("as much as needed, not more").
+**J4.** **JSDoc on the public API** (parameters, return, throws) when it adds value.
 
-## K. Async / Promesas
+## K. Async / promises
 
-**K1.** **`async`/`await`** sobre callbacks y `.then()` encadenado.
-**K2.** **Ninguna promesa flotando** (`@typescript-eslint/no-floating-promises` en `error`): `await`
-o `void` explícito.
-**K3.** **Paraleliza lo independiente** con `Promise.all`; secuencial solo si hay dependencia.
-**K4.** **Toda operación larga acepta y respeta `AbortSignal`** (fetch, streaming, loops). Contrato
-de `LLMProvider.chat` (`cb.signal`).
-**K5.** **Streams por chunks** (`for await`), sin acumular todo en memoria.
-**K6.** **Timeout en toda I/O de red**: sin él, una llamada cuelga la UI indefinidamente.
+**K1.** **`async`/`await`** over callbacks and chained `.then()`.
+**K2.** **No floating promise** (`@typescript-eslint/no-floating-promises` at `error`): `await`
+or explicit `void`.
+**K3.** **Parallelize the independent** with `Promise.all`; sequential only if there's a dependency.
+**K4.** **Every long operation accepts and respects `AbortSignal`** (fetch, streaming, loops). The
+`LLMProvider.chat` contract (`cb.signal`).
+**K5.** **Stream by chunks** (`for await`), without accumulating everything in memory.
+**K6.** **Timeout on all network I/O**: without it, a call hangs the UI indefinitely.
 
-## L. Errores
+## L. Errors
 
-**L1.** **Lanza `Error` (o subclase), nunca strings ni objetos planos**: sin stack no hay
-diagnóstico. `throw new Error('parse failed: ' + path)`.
-**L2.** **No tragues excepciones**: `catch {}` vacío solo con comentario que lo justifique; mínimo,
-loguear. **Omite el binding** si no lo usas: `catch { … }`.
-**L3.** **Esperado vs bug**: red/clave inválida → mensaje accionable; `TypeError` → bug tuyo, no lo
-disfraces de toast amable.
-**L4.** **Valida en la frontera** (usuario, disco, red, mensajes del webview) antes de propagar al
-núcleo tipado.
-**L5.** **Centraliza el formateo** (un helper de error HTTP), no `try/catch` ad-hoc copiados.
+**L1.** **Throw `Error` (or a subclass), never strings or plain objects**: without a stack there's no
+diagnosis. `throw new Error('parse failed: ' + path)`.
+**L2.** **Don't swallow exceptions**: an empty `catch {}` only with a comment that justifies it; at
+minimum, log. **Omit the binding** if you don't use it: `catch { … }`.
+**L3.** **Expected vs bug**: network/invalid key → actionable message; `TypeError` → your bug, don't
+disguise it as a friendly toast.
+**L4.** **Validate at the boundary** (user, disk, network, webview messages) before propagating to the
+typed core.
+**L5.** **Centralize formatting** (one HTTP-error helper), not ad-hoc copied `try/catch`.
 
-## M. Módulos, organización y tamaño
+## M. Modules, organization and size
 
-> Origen del invariante: **3 god-files de ~2000 líneas** costaron horas de desmodularización.
+> Origin of the invariant: **3 god-files of ~2000 lines** cost hours of de-modularization.
 
-**M1.** **Techo duro: ningún archivo >500 líneas** (TS, JS **y CSS**).
-**M2.** **Objetivo real ~200–300**; a 400+ planifica el corte.
-**M3.** **Un archivo = un motivo de cambio** (alta cohesión, bajo acoplamiento).
-**M4.** Señales de corte: nombre con "y"; imports temáticamente distintos; funciones relacionadas
-separadas por scroll; merge conflicts recurrentes; cuesta testear por mezclar I/O y lógica.
-**M5.** **Divide al escribir, no al final** (el corte tardío es refactor caro).
-**M6.** **Exporta lo mínimo**; lo que no se importa fuera, no se exporta; lo que no se importa, se borra.
-**M7.** **Sin dependencias circulares**: si A↔B, falta una capa.
-**M8.** **Agrupa y limpia imports** (orden estable, sin imports muertos — lo marca el linter).
-**M9.** **No mezcles tecnologías**: HTML/CSS/JS separados, sin estilos ni markup incrustados en JS.
-**M10.** **Saca a configuración** lo que cambie a menudo (objetos de config, traducciones).
+**M1.** **Hard ceiling: no file >500 lines** (TS, JS **and CSS**).
+**M2.** **Real target ~200–300**; at 400+ plan the split.
+**M3.** **One file = one reason to change** (high cohesion, low coupling).
+**M4.** Split signals: a name with "and"; thematically distinct imports; related functions separated
+by scrolling; recurring merge conflicts; hard to test because it mixes I/O and logic.
+**M5.** **Split while writing, not at the end** (a late split is an expensive refactor).
+**M6.** **Export the minimum**; what isn't imported elsewhere isn't exported; what isn't imported is deleted.
+**M7.** **No circular dependencies**: if A↔B, a layer is missing.
+**M8.** **Group and clean imports** (stable order, no dead imports — the linter flags it).
+**M9.** **Don't mix technologies**: HTML/CSS/JS separate, no styles or markup embedded in JS.
+**M10.** **Move to configuration** what changes often (config objects, translations).
 
-## N. Vistas / webview
+## N. Views / webview
 
-Toda vista o panel es un **módulo cerrado**, no un script monolítico. Piezas, cada una en su archivo:
+Every view or panel is a **closed module**, not a monolithic script. Pieces, each in its own file:
 
-| Pieza        | Responsabilidad                       | No hace                          |
+| Piece        | Responsibility                        | Doesn't do                       |
 |--------------|---------------------------------------|----------------------------------|
-| **render**   | DOM ← estado (`estado → nodos`, puro) | No hace fetch ni muta estado     |
-| **store**    | Datos de la vista y transiciones      | No toca el DOM                   |
-| **eventos**  | Listeners → acciones sobre el store   | No renderiza directo             |
-| **protocolo**| Mensajes host↔webview de la vista     | No tiene lógica de presentación  |
-| **estilos**  | CSS de la vista, aislado              | No define estilos globales       |
+| **render**   | DOM ← state (`state → nodes`, pure)   | No fetch, no state mutation      |
+| **store**    | The view's data and transitions       | Doesn't touch the DOM            |
+| **events**   | Listeners → actions on the store      | Doesn't render directly          |
+| **protocol** | The view's host↔webview messages      | No presentation logic            |
+| **styles**   | The view's CSS, isolated              | Doesn't define global styles     |
 
-**N1.** **Una vista = una carpeta/prefijo**; no mezclada con otra vista.
-**N2.** **El controlador solo orquesta** (cablea render+eventos+protocolo); cero lógica de negocio.
-**N3.** **Sin estado global compartido entre vistas**: cada una con su store; lo común se inyecta.
-**N4.** **Extrae el componente reutilizable** (botón, lista, spinner) en cuanto aparece la 2.ª copia.
-**N5.** **El webview no tiene FS ni red propios**: pide al host por `postMessage` (diseño de seguridad).
-**N6.** **Contrato de mensajes explícito**: `type` + payload conocido; dispatch en un router, no
-`switch` gigantes duplicados a ambos lados.
-**N7.** **ES modules reales** (`import`/`export`), nunca globals colgando de `window`; namespacea lo
-inevitable (`const App = App || {}`).
-**N8.** El webview es **TypeScript** (`src/webview/**`), bundleado por esbuild (`scripts/build-webview.ts`)
-a `media/dist/` (servido al webview). Red de tipos: **`npm run typecheck:webview`** (`tsc -p
-src/webview/tsconfig.json`) tras cada cambio (gate separado del build).
-**N9.** **Distingue entry-point de módulo por convención** (`*.entry.js` o carpeta `app/`), no por
-dejar dos archivos del mismo nombre en carpetas distintas.
+**N1.** **One view = one folder/prefix**; not mixed with another view.
+**N2.** **The controller only orchestrates** (wires render+events+protocol); zero business logic.
+**N3.** **No global state shared between views**: each one with its store; the common is injected.
+**N4.** **Extract the reusable component** (button, list, spinner) as soon as the 2nd copy appears.
+**N5.** **The webview has no FS or network of its own**: it asks the host via `postMessage` (a security design).
+**N6.** **Explicit message contract**: `type` + known payload; dispatch in one router, not giant
+`switch`es duplicated on both sides.
+**N7.** **Real ES modules** (`import`/`export`), never globals hanging off `window`; namespace the
+unavoidable (`const App = App || {}`).
+**N8.** The webview is **TypeScript** (`src/webview/**`), bundled by esbuild (`scripts/build-webview.ts`)
+to `media/dist/` (served to the webview). Type net: **`npm run typecheck:webview`** (`tsc -p
+src/webview/tsconfig.json`) after every change (a gate separate from the build).
+**N9.** **Distinguish entry-point from module by convention** (`*.entry.js` or an `app/` folder), not by
+leaving two same-named files in different folders.
 
-## O. CSS — metodología y nombres
+## O. CSS — methodology and names
 
-**O1.** **Adopta una metodología** y sé consistente: BEM (recomendada), o ITCSS/OOCSS/SMACSS.
-**O2.** **BEM**: `block`, `block__element`, `block--modifier`. Ej. `.card`, `.card__title`, `.card--featured`.
-**O3.** **OOCSS**: separa estructura de piel; **múltiples clases** por elemento (`class="box warning"`).
-**O4.** **Nombres descriptivos por propósito**, no genéricos (`.board`, `.user` → reutilización
-accidental).
-**O5.** **No concatenes nombres** con `&-foo` del preprocesador (oculta el selector real a la búsqueda).
-**O6.** **Agrupa estilos por sujeto** (el elemento), no por contexto: todos los botones juntos, no
-dispersos por componente.
+**O1.** **Adopt a methodology** and be consistent: BEM (recommended), or ITCSS/OOCSS/SMACSS.
+**O2.** **BEM**: `block`, `block__element`, `block--modifier`. E.g. `.card`, `.card__title`, `.card--featured`.
+**O3.** **OOCSS**: separate structure from skin; **multiple classes** per element (`class="box warning"`).
+**O4.** **Descriptive names by purpose**, not generic (`.board`, `.user` → accidental reuse).
+**O5.** **Don't concatenate names** with the preprocessor's `&-foo` (it hides the real selector from search).
+**O6.** **Group styles by subject** (the element), not by context: all buttons together, not scattered
+across components.
 
-## P. CSS — selectores y especificidad
+## P. CSS — selectors and specificity
 
-**P1.** **Cero IDs en selectores** para elementos **reutilizables o estilados por contexto**
-(especificidad alta que provoca guerras de cascada). **Excepción acotada:** un **singleton** del
-documento (un único `#messages`, `#sendBtn`, `#notices`) puede estilarse por su `id` — el motivo de
-la regla (evitar guerras de especificidad y reutilización accidental) no aplica a un elemento único.
-Toda **vista/componente nuevo** usa **clases** (los paneles `engines`/`voices` ya lo hacen).
-**P2.** **Cero estilos inline** (`style="…"`): mezclan contenido y presentación.
-**P3.** **Sin selectores cualificados**: `.nav`, no `ul.nav`.
-**P4.** **Sin cadenas largas/innecesarias**: `.someclass li`, no `body #wrap .someclass ul li`.
-**P5.** **Evita selectores peligrosos/genéricos** (`div {}` con propiedades específicas) que filtran
-estilos.
-**P6.** **Cada selector clave una sola vez** (single source of truth); no repartas `.btn` por varias
-reglas.
-**P7.** **Anidación ≤3 niveles** en preprocesador.
-**P8.** **`!important` solo proactivo** (una regla deliberadamente global, p. ej. errores en rojo),
-**nunca reactivo** para ganar especificidad.
+**P1.** **Zero IDs in selectors** for elements that are **reusable or styled by context** (high
+specificity that triggers cascade wars). **Bounded exception:** a document **singleton** (a single
+`#messages`, `#sendBtn`, `#notices`) may be styled by its `id` — the reason for the rule (avoid
+specificity wars and accidental reuse) doesn't apply to a unique element. Every **new view/component**
+uses **classes** (the `engines`/`voices` panels already do).
+**P2.** **Zero inline styles** (`style="…"`): they mix content and presentation.
+**P3.** **No qualified selectors**: `.nav`, not `ul.nav`.
+**P4.** **No long/unnecessary chains**: `.someclass li`, not `body #wrap .someclass ul li`.
+**P5.** **Avoid dangerous/generic selectors** (`div {}` with specific properties) that leak styles.
+**P6.** **Each key selector once** (single source of truth); don't spread `.btn` across several rules.
+**P7.** **Nesting ≤3 levels** in a preprocessor.
+**P8.** **`!important` only proactively** (a deliberately global rule, e.g. errors in red),
+**never reactively** to win specificity.
 
-## Q. CSS — valores y unidades
+## Q. CSS — values and units
 
-**Q1.** **Unidades relativas** (`rem`, `em`, `%`, `vw/vh`, `fr`) sobre `px`/`pt` fijos.
-**Q2.** **Sin valores hard-coded**: `line-height: 1.333`, no `32px`.
-**Q3.** **Sin magic numbers ni brute-forcing** (`margin-left: -3px` a ojo = box-model mal entendido).
-**Q4.** **Variables CSS** (`--color-accent`) para temas/reutilización; en un editor hereda los
-*theme tokens* de VS Code (`var(--vscode-…)`).
-**Q5.** **Hex sobre nombres de color**; nombra las variables de color por legibilidad.
-**Q6.** **Longhand sobre shorthand** cuando el shorthand resetearía propiedades que no querías tocar.
-**Q7.** **El contenido define el tamaño** (`padding`/`max-width`), no dimensiones fijas.
-**Q8.** **El padre controla la posición del hijo** (margins/posicionamiento fuera del componente) →
-reutilizable.
-**Q9.** **Distingue block vs inline** al estilar; **mantén la semántica HTML** (no alteres markup solo
-por estilo).
-**Q10.** **No deshagas estilos**: añade progresivamente; si hay que quitar, reestructura el selector.
+**Q1.** **Relative units** (`rem`, `em`, `%`, `vw/vh`, `fr`) over fixed `px`/`pt`.
+**Q2.** **No hard-coded values**: `line-height: 1.333`, not `32px`.
+**Q3.** **No magic numbers or brute-forcing** (`margin-left: -3px` by eye = misunderstood box model).
+**Q4.** **CSS variables** (`--color-accent`) for theming/reuse; in an editor inherit VS Code's
+*theme tokens* (`var(--vscode-…)`).
+**Q5.** **Hex over color names**; name color variables for readability.
+**Q6.** **Longhand over shorthand** when the shorthand would reset properties you didn't mean to touch.
+**Q7.** **Content defines the size** (`padding`/`max-width`), not fixed dimensions.
+**Q8.** **The parent controls the child's position** (margins/positioning outside the component) →
+reusable.
+**Q9.** **Distinguish block vs inline** when styling; **keep the HTML semantics** (don't alter markup
+just for style).
+**Q10.** **Don't undo styles**: add progressively; if you must remove, restructure the selector.
 
-## R. CSS — organización y build
+## R. CSS — organization and build
 
-**R1.** **Una propiedad por línea**; **agrupa selectores** que comparten reglas con coma
+**R1.** **One property per line**; **group selectors** that share rules with a comma
 (`h1, h2, h3 { … }`).
-**R2.** **Orden de propiedades consistente** (alfabético u otro, vía linter).
-**R3.** **Secciones lógicas comentadas**, orden general → utilidades → layout/sitewide →
-componentes; marcadores buscables (`/* || Header */`).
-**R4.** **Comenta decisiones no obvias** (fallbacks, hacks temporales).
-**R5.** **Modulariza por vista/feature** (varios archivos pequeños), carga solo lo necesario.
-**R6.** **Separa global vs local**; **componentes con estilo encapsulado**.
-**R7.** **Elimina CSS muerto** (PurgeCSS/UnCSS); **minifica** en build (cssnano).
-**R8.** **Autoprefixer + Browserslist** para compatibilidad; **stylelint** para consistencia.
-**R9.** **Pocas fuentes**: cada WebFont retrasa el render; optimiza su carga.
-**R10.** **Media queries con variables** descriptivas (`$medium: 768px`).
+**R2.** **Consistent property order** (alphabetical or other, via linter).
+**R3.** **Commented logical sections**, order general → utilities → layout/sitewide →
+components; searchable markers (`/* || Header */`).
+**R4.** **Comment non-obvious decisions** (fallbacks, temporary hacks).
+**R5.** **Modularize by view/feature** (several small files), load only what's needed.
+**R6.** **Separate global vs local**; **components with encapsulated style**.
+**R7.** **Remove dead CSS** (PurgeCSS/UnCSS); **minify** in the build (cssnano).
+**R8.** **Autoprefixer + Browserslist** for compatibility; **stylelint** for consistency.
+**R9.** **Few fonts**: each WebFont delays render; optimize its loading.
+**R10.** **Media queries with descriptive variables** (`$medium: 768px`).
 
-## S. Rendimiento
+## S. Performance
 
-**S1.** **Enfócate en lo grande**: reflows del DOM, eventos frecuentes, peticiones HTTP — no
-micro-optimizar lo invisible.
-**S2.** **Minimiza el acceso al DOM**: cachea queries, agrupa actualizaciones (DOM es caro).
-**S3.** **Lazy-loading / code-splitting** en puntos lógicos; reduce el bundle inicial.
-**S4.** **Comprime (gzip/brotli) y minifica** en producción.
-**S5.** **Web Workers** para tareas pesadas que bloquearían la UI.
-**S6.** **Feature detection sobre browser detection**; sin código browser-specific.
+**S1.** **Focus on the big stuff**: DOM reflows, frequent events, HTTP requests — not
+micro-optimizing the invisible.
+**S2.** **Minimize DOM access**: cache queries, batch updates (the DOM is expensive).
+**S3.** **Lazy-loading / code-splitting** at logical points; reduce the initial bundle.
+**S4.** **Compress (gzip/brotli) and minify** in production.
+**S5.** **Web Workers** for heavy tasks that would block the UI.
+**S6.** **Feature detection over browser detection**; no browser-specific code.
 
-## T. Extensiones VS Code
+## T. VS Code extensions
 
-**T1.** Layout: todo el source bajo `src/` dividido por runtime — `src/host/` (Node; entry
-`src/host/extension.ts`), `src/webview/` (sandbox), `src/shared/` (puro). `media/` queda solo para
-assets servidos al webview (CSS, imágenes, `dict/`, y `dist/` generado — que incluye el UMD de
-`mermaid` copiado de su devDep npm; cero `.js` committeado). Más `package.json` (manifiesto),
+**T1.** Layout: all source under `src/` split by runtime — `src/host/` (Node; entry
+`src/host/extension.ts`), `src/webview/` (sandbox), `src/shared/` (pure). `media/` holds only
+assets served to the webview (CSS, images, `dict/`, and the generated `dist/` — which includes the
+`mermaid` UMD copied from its npm devDep; zero committed `.js`). Plus `package.json` (manifest),
 `tsconfig.json`, `.vscode/{launch,tasks}.json`.
-**T2.** **`@types/vscode`** para tipos (el paquete `vscode` está deprecado).
-**T3.** `activate(context)` al disparo; `deactivate()` para limpieza.
-**T4.** **Activación perezosa**: dispara por contribución concreta (comando, lenguaje, view), **no**
-en el arranque del editor; `activationEvents` mínimo.
-**T5.** **Contribution points** declaran cómo se invocan las capacidades (commands, menus, views,
+**T2.** **`@types/vscode`** for types (the `vscode` package is deprecated). Pin it to `engines.vscode`
+(the minimum VS Code you support) — not floating to latest, or `vsce package` fails.
+**T3.** `activate(context)` on trigger; `deactivate()` for cleanup.
+**T4.** **Lazy activation**: trigger on a concrete contribution (command, language, view), **not**
+at editor startup; minimal `activationEvents`.
+**T5.** **Contribution points** declare how capabilities are invoked (commands, menus, views,
 settings).
-**T6.** **`package.json` ↔ código ↔ nls en sync**: todo comando declarado en `contributes.commands`
-y registrado; toda clave `%key%` en **todos** los bundles `package.nls.<lang>` (huérfana = literal).
-**T7.** Tras tocar `package.json` (commands/menus/views), **recarga el dev host (⌘R)**.
-**T8.** **Todo disposable a `context.subscriptions`** (comandos, paneles, watchers, procesos): una
-fuga es una fuga en el editor del usuario.
-**T9.** **Procesos hijo con lifecycle explícito** (Ollama, Piper, MCP en `*/manager.ts`): mueren con
-la extensión.
-**T10.** **i18n desde el día 1**: inglés como clave; cero texto visible hardcodeado.
-**T11.** **Extiende por el punto de extensión existente** (factory/interface, p. ej. `LLMProvider`),
-no parcheando el núcleo.
-**T12.** **Empaqueta con esbuild** (recomendado por MS; minify solo con `--minify`); declara deps
-dinámicas como estáticas o `external`.
-**T13.** **Prueba en el Extension Development Host** (F5) + tests unitarios antes de publicar.
-**T14.** Revisa el `.vsix` con `vsce ls` antes de `vsce package` (respeta `.vscodeignore`).
+**T6.** **`package.json` ↔ code ↔ nls in sync**: every command declared in `contributes.commands`
+and registered; every `%key%` in **all** `package.nls.<lang>` bundles (orphan = literal).
+**T7.** After touching `package.json` (commands/menus/views), **reload the dev host (⌘R)**.
+**T8.** **Every disposable to `context.subscriptions`** (commands, panels, watchers, processes): a
+leak is a leak in the user's editor.
+**T9.** **Child processes with explicit lifecycle** (Ollama, Piper, MCP in `*/manager.ts`): they die
+with the extension.
+**T10.** **i18n from day 1**: English as the key; zero hardcoded visible text.
+**T11.** **Extend through the existing extension point** (factory/interface, e.g. `LLMProvider`),
+not by patching the core.
+**T12.** **Bundle with esbuild** (recommended by MS; minify only with `--minify`); declare dynamic
+deps as static or `external`.
+**T13.** **Test in the Extension Development Host** (F5) + unit tests before publishing.
+**T14.** Inspect the `.vsix` with `vsce ls` before `vsce package` (respects `.vscodeignore`).
 
-## U. Seguridad
+## U. Security
 
-**U1.** **Secretos en `SecretStorage`**, jamás en settings ni disco (API keys vía `KEY_PROVIDERS`).
-**U2.** **Respeta `untrustedWorkspaces`**: features con FS/exec degradan con gracia.
-**U3.** **Webview con CSP estricta**: `nonce` por script, sin inline scripts, sin `eval`.
-**U4.** **Nunca `innerHTML` con datos de usuario/modelo** (XSS): usa `textContent`, construye DOM o
-sanitiza el markdown; escapa nombres (`escapeHtml`) antes de interpolar.
-**U5.** **Valida toda entrada externa**; cuidado con **SSRF** y **path traversal** en herramientas
-que tocan URLs/rutas.
-**U6.** **Dependencias auditadas** (`npm audit`/Snyk); fija binarios externos por hash/pin.
+**U1.** **Secrets in `SecretStorage`**, never in settings or on disk (API keys via `KEY_PROVIDERS`).
+**U2.** **Respect `untrustedWorkspaces`**: features with FS/exec degrade gracefully.
+**U3.** **Webview with strict CSP**: `nonce` per script, no inline scripts, no `eval`.
+**U4.** **Never `innerHTML` with user/model data** (XSS): use `textContent`, build DOM or
+sanitize the markdown; escape names (`escapeHtml`) before interpolating.
+**U5.** **Validate all external input**; beware **SSRF** and **path traversal** in tools that touch
+URLs/paths.
+**U6.** **Audited dependencies** (`npm audit`/Snyk); pin external binaries by hash.
 
-> Las reglas U7–U11 nacen de hallazgos reales de **CodeQL** (ver §W7); cada una cita su query.
+> Rules U7–U11 come from real **CodeQL** findings (see §W7); each one cites its query.
 
-**U7.** **Sanea HTML con *allowlist* de DOM, no *denylist* con regex.** Para insertar HTML
-potencialmente no confiable (READMEs, contenido scrapeado), parséalo en un `<template>` **inerte**
-(su contenido no se renderiza y los `<script>` no se ejecutan) y conserva **solo** tags/atributos de
-una lista blanca (ver `sanitizeHtml` en `models.js`). Un `.replace()` que borra `<script>`/`on*` es
-**incompleto**: un payload partido o anidado (`<scr<script>ipt>`) se reensambla en una sola pasada
-(CodeQL `js/incomplete-multi-character-sanitization`). Si *de verdad* no hay alternativa a regex,
-hazlo en **bucle hasta punto fijo** (`do { p=s; s=s.replace(re,'') } while (s!==p)`).
-**U8.** **Filtros de tags tolerantes** (no single-shot ingenuo). Un cierre como `</script>` debe
-matchear también `</script >` / `</script\tbar>`: usa `</script[^>]*>` (CodeQL `js/bad-tag-filter`).
-**U9.** **Bytes no confiables → media por `Blob` + `URL.createObjectURL`**, nunca por `data:` +
-concatenación. Meter `mime`/base64 de un adjunto en `img.src = 'data:'+mime+';base64,'+data` lleva
-datos no confiables a un *sink* de URL (CodeQL `js/xss-through-dom`, `js/client-side-unvalidated-url-redirection`).
-Decodifica a `Blob`, usa el `blob:` que **genera el navegador**, valida el `mime` (`image/…`) y
-**revoca** la object URL en `load`/`error` (ver `setImageSrc` en `core/dom.js`).
-**U10.** **Orden de decodificación de entidades: `&amp;` al final.** Decodificar `&amp;`→`&` antes que
-`&lt;`/`&gt;` produce doble-unescape (`&amp;lt;` → `<` en vez de `&lt;`) (CodeQL `js/double-escaping`).
-**U11.** **Sin reemplazos identidad / no-op.** `.replace(/X/g, 'X')` reemplaza algo por sí mismo
-(CodeQL `js/identity-replacement`); para **escapar** un carácter a un literal usa la secuencia escapada
-(p. ej. U+2028/U+2029 → `'\\u2028'`/`'\\u2029'` para embeber JSON en un `<script>` inline), no el carácter.
-**U12.** **`innerHTML` solo con HTML que tú generas; escapa toda interpolación** — incluso etiquetas
-"de confianza" (traducciones `t()`, nombres): `escapeHtml()` antes de concatenar (CodeQL `js/xss`).
-Mejor aún, construye nodos DOM (`textContent`).
+**U7.** **Sanitize HTML with a DOM *allowlist*, not a regex *denylist*.** To insert potentially
+untrusted HTML (READMEs, scraped content), parse it into an inert `<template>` (its content isn't
+rendered and `<script>`s don't run) and keep **only** tags/attributes from a whitelist (see
+`sanitizeHtml` in `src/webview/models.ts`). A `.replace()` that strips `<script>`/`on*` is
+**incomplete**: a split or nested payload (`<scr<script>ipt>`) reassembles in a single pass
+(CodeQL `js/incomplete-multi-character-sanitization`). If there's *truly* no alternative to regex,
+do it in a **loop to a fixed point** (`do { p=s; s=s.replace(re,'') } while (s!==p)`).
+**U8.** **Tolerant tag filters** (no naive single-shot). A closing tag like `</script>` must also
+match `</script >` / `</script\tbar>`: use `</script[^>]*>` (CodeQL `js/bad-tag-filter`).
+**U9.** **Untrusted bytes → media via `Blob` + `URL.createObjectURL`**, never via `data:` +
+concatenation. Putting an attachment's `mime`/base64 into `img.src = 'data:'+mime+';base64,'+data`
+sends untrusted data into a URL *sink* (CodeQL `js/xss-through-dom`, `js/client-side-unvalidated-url-redirection`).
+Decode to a `Blob`, use the `blob:` the **browser generates**, validate the `mime` (`image/…`) and
+**revoke** the object URL on `load`/`error` (see `setImageSrc` in `src/webview/core/dom.ts`).
+**U10.** **Entity-decoding order: `&amp;` last.** Decoding `&amp;`→`&` before `&lt;`/`&gt;` produces a
+double-unescape (`&amp;lt;` → `<` instead of `&lt;`) (CodeQL `js/double-escaping`).
+**U11.** **No identity / no-op replacements.** `.replace(/X/g, 'X')` replaces something with itself
+(CodeQL `js/identity-replacement`); to **escape** a character to a literal use the escaped sequence
+(e.g. U+2028/U+2029 → `'\\u2028'`/`'\\u2029'` to embed JSON in an inline `<script>`), not the character.
+**U12.** **`innerHTML` only with HTML you generate; escape every interpolation** — even "trusted"
+tags (translations `t()`, names): `escapeHtml()` before concatenating (CodeQL `js/xss`).
+Better still, build DOM nodes (`textContent`).
 
 ## V. Testing
 
-**V1.** **`node:test`** sobre la **lógica pura** (parsing, transforms, helpers): máximo retorno.
-**V2.** **Diseña para testear**: lo difícil de testear mezcla I/O y lógica → extrae la lógica.
-**V3.** **Un test de regresión por cada bug** arreglado.
-**V4.** **Corre en CI** y bloquea el merge si falla.
-**V5.** **"Testing > shipping"**: cubre toda feature nueva; sube la confianza, baja regresiones.
+**V1.** **`node:test`** on the **pure logic** (parsing, transforms, helpers): maximum return.
+**V2.** **Design for testability**: what's hard to test mixes I/O and logic → extract the logic.
+**V3.** **One regression test per bug** fixed.
+**V4.** **Run in CI** and block the merge if it fails.
+**V5.** **"Testing > shipping"**: cover every new feature; raise confidence, lower regressions.
 
-## W. Tooling, build e higiene de repo
+## W. Tooling, build and repo hygiene
 
-**W1.** **ESLint** (flat config) en `error` para lo que rompe (`no-floating-promises`, `no-var`,
-`no-unused-vars`); pragmático con `any` solo en la capa de JSON externo.
-**W2.** **Prettier** para formato (cero debates de estilo); **stylelint** para CSS; **lint-staged**
-en commits.
-**W3.** **Sin generados ni backups versionados** (`out/`, `*-backup/`, `*.old`) salvo intención
-explícita en `.gitignore`/`.vscodeignore`. Git es el backup; nada de código comentado en bloque.
-**W4.** **Docs de planificación efímeros** (`plan-*.md`, `*-todo.md`) no se quedan en `main`: se
-convierten en issues o se borran.
-**W5.** **`CHANGELOG.md` por release**, `version` bumpeada antes de publicar.
-**W6.** **README/ARCHITECTURE reflejan la realidad**, no aspiraciones.
-**W7.** **GitHub CodeQL (code scanning)** corre en cada push a `master`; mantén sus *security
-queries* de JS/TS en **0 alertas** (`js/xss`, `js/xss-through-dom`, `js/client-side-unvalidated-url-redirection`,
+**W1.** **ESLint** (flat config) at `error` for what breaks (`no-floating-promises`, `no-var`,
+`no-unused-vars`); pragmatic with `any` only in the external-JSON layer.
+**W2.** **Prettier** for formatting (zero style debates); **stylelint** for CSS; **lint-staged**
+on commits.
+**W3.** **No versioned generated files or backups** (`out/`, `*-backup/`, `*.old`) except explicit
+intent in `.gitignore`/`.vscodeignore`. Git is the backup; no block-commented code.
+**W4.** **Ephemeral planning docs** (`plan-*.md`, `*-todo.md`) don't stay on `main`: they
+become issues or are deleted.
+**W5.** **`CHANGELOG.md` per release**, `version` bumped before publishing.
+**W6.** **README/ARCHITECTURE reflect reality**, not aspirations.
+**W7.** **GitHub CodeQL (code scanning)** runs on every push to `master`; keep its *security
+queries* for JS/TS at **0 alerts** (`js/xss`, `js/xss-through-dom`, `js/client-side-unvalidated-url-redirection`,
 `js/bad-tag-filter`, `js/double-escaping`, `js/incomplete-multi-character-sanitization`,
-`js/identity-replacement`…). Ante un falso positivo legítimo, **refactoriza al patrón que CodeQL
-reconoce** (allowlist DOM, `Blob` URL, guard con `RegExp.test`) antes de recurrir a un *dismiss*
-justificado. Las reglas U7–U12 codifican los hallazgos ya vistos.
+`js/identity-replacement`…). For a legitimate false positive, **refactor to the pattern CodeQL
+recognizes** (DOM allowlist, `Blob` URL, guard with `RegExp.test`) before resorting to a justified
+*dismiss*. Rules U7–U12 encode the findings already seen.
 
-## X. Checklist pre-commit
+## X. Pre-commit checklist
 
 ```bash
-npm run compile              # host: tsc → out/   (0 errores)
-npm run lint                 # eslint src   (0 errores / 0 warnings)
-npm run typecheck:webview    # webview: tsc -p src/webview/tsconfig.json (0 errores)
+npm run compile              # host: tsc → out/   (0 errors)
+npm run lint                 # eslint src   (0 errors / 0 warnings)
+npm run typecheck:webview    # webview: tsc -p src/webview/tsconfig.json (0 errors)
 npm run build:webview        # webview: esbuild src/webview → media/dist/*.js
 npm test                     # compile + node:test
 ```
 
-A ojo:
-- [ ] ¿Algún archivo >500 líneas (TS, JS o CSS)? → divídelo ahora.
-- [ ] ¿Vista nueva modularizada (render / store / eventos / protocolo / estilos)?
-- [ ] ¿`any` nuevo fuera de la capa de JSON externo? → `unknown` + narrowing.
-- [ ] ¿Promesa nueva `await`eada o `void`? ¿I/O con timeout y `AbortSignal`?
-- [ ] ¿`innerHTML` con datos del modelo? → `textContent`/sanitiza (allowlist DOM, no regex; U7/U12).
-- [ ] ¿HTML/URL no confiable? → sin denylist regex, sin `data:`+concat (usa `Blob`/`createObjectURL`),
-  `&amp;` se decodifica al final, sin `.replace` identidad (U7–U11). ¿CodeQL en 0 (W7)?
-- [ ] ¿Selector CSS con ID o `!important` reactivo? → refactor.
-- [ ] ¿Nuevo `%nls%` en todos los bundles? ¿Comando declarado + en disposables?
-- [ ] ¿Secreto nuevo en `SecretStorage`?
-- [ ] ¿Quedó código muerto, backup o doc de plan suelto? → bórralo.
+By eye:
+- [ ] Any file >500 lines (TS, JS or CSS)? → split it now.
+- [ ] New view modularized (render / store / events / protocol / styles)?
+- [ ] New `any` outside the external-JSON layer? → `unknown` + narrowing.
+- [ ] New promise `await`ed or `void`ed? I/O with timeout and `AbortSignal`?
+- [ ] `innerHTML` with model data? → `textContent`/sanitize (DOM allowlist, not regex; U7/U12).
+- [ ] Untrusted HTML/URL? → no denylist regex, no `data:`+concat (use `Blob`/`createObjectURL`),
+  `&amp;` decoded last, no identity `.replace` (U7–U11). CodeQL at 0 (W7)?
+- [ ] CSS selector with an ID or reactive `!important`? → refactor.
+- [ ] New `%nls%` in all bundles? Command declared + in disposables?
+- [ ] New secret in `SecretStorage`?
+- [ ] Any dead code, backup or stray plan doc left? → delete it.
 
-> **~140 reglas** en 24 secciones (A–X). Si una situación no encaja en ninguna, es candidata a regla
-> nueva: abre PR sobre este documento.
+> **~140 rules** across 24 sections (A–X). If a situation fits none, it's a candidate for a new
+> rule: open a PR against this document.

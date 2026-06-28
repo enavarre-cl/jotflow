@@ -1,6 +1,6 @@
-/* conversation.css — estilos de la vista de conversación extraídos de composer.css
-   (R5: modularización por feature; mantiene composer.css < 500 líneas tras R1).
-   Secciones: herramientas (tool calls) · export a PDF/print · resumen de contexto. */
+/* conversation.css — conversation-view styles split out of composer.css
+   (R5: per-feature modularization; keeps composer.css < 500 lines per R1).
+   Sections: tools (tool calls) · export to PDF/print · context summary. */
 
 /* ---- Tools ---- */
 .tool-calls {
