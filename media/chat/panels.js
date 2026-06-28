@@ -6,6 +6,8 @@ import { $, escapeHtml } from '../core/dom.js';
 import { t } from '../core/i18n.js';
 import { ICONS } from '../core/icons.js';
 import { renderRaw as renderMarkdownImpl } from '../render/markdown.js';
+import { getDoc } from '../ui/store.js';
+import { vscode } from '../core/vscode.js';
 
 const configPanel = $('config');
 const thinkPanel = $('thinking');
@@ -20,8 +22,36 @@ export function updateSide() {
     || !toolsPanel.classList.contains('hidden');
   sidepanels.classList.toggle('hidden', !open);
 }
-export function openThink() { thinkPanel.classList.remove('hidden'); updateSide(); }
-export function openTools() { toolsPanel.classList.remove('hidden'); updateSide(); }
+// Panel visibility is a per-conversation preference persisted in the .chat (doc.ui.thinkOpen /
+// toolsOpen). undefined = default (closed; auto-opens when reasoning/tools stream); true = the user
+// opened it; false = the user closed it (streaming must not reopen it). Persisting goes through the
+// same setConfig path as the config panel, so it survives reloads.
+function persistUi(patch) {
+  const doc = getDoc();
+  if (doc) doc.ui = Object.assign({}, doc.ui, patch);
+  vscode.postMessage({ type: 'setConfig', patch: { ui: patch } });
+}
+
+// Explicit user open: remember it so the panel stays open (and auto-open is re-enabled) across reloads.
+export function openThink() { persistUi({ thinkOpen: true }); thinkPanel.classList.remove('hidden'); updateSide(); }
+export function openTools() { persistUi({ toolsOpen: true }); toolsPanel.classList.remove('hidden'); updateSide(); }
+
+// Auto open (from streaming reasoning / tool calls): only if the user hasn't explicitly closed it.
+export function autoOpenThink() { if (getDoc() && getDoc().ui && getDoc().ui.thinkOpen === false) return; thinkPanel.classList.remove('hidden'); updateSide(); }
+export function autoOpenTools() { if (getDoc() && getDoc().ui && getDoc().ui.toolsOpen === false) return; toolsPanel.classList.remove('hidden'); updateSide(); }
+
+// User close: persist so streaming won't reopen it and it stays closed across reloads.
+export function dismissThink() { persistUi({ thinkOpen: false }); thinkPanel.classList.add('hidden'); updateSide(); }
+export function dismissTools() { persistUi({ toolsOpen: false }); toolsPanel.classList.add('hidden'); updateSide(); }
+
+// Applies the persisted visibility when a conversation loads. Only a panel the user explicitly
+// pinned open (=== true) shows on load; otherwise it starts closed and may auto-open while streaming.
+export function applyPanelState(doc) {
+  const ui = (doc && doc.ui) || {};
+  thinkPanel.classList.toggle('hidden', ui.thinkOpen !== true);
+  toolsPanel.classList.toggle('hidden', ui.toolsOpen !== true);
+  updateSide();
+}
 
 // Renders a list of tool activity in the panel.
 export function showTools(activity) {

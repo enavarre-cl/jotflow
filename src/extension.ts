@@ -387,6 +387,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
       bundle: activeBundle(),
       downloadedVoices: this.downloadedVoiceIds(),
       piperCustomSet: !!vscode.workspace.getConfiguration("jotflow").get<string>("tts.piperModel", ""),
+      chatterboxExaggeration: vscode.workspace.getConfiguration("jotflow").get<number>("tts.chatterboxExaggeration", 0.5),
     });
   }
 }

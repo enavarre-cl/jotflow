@@ -31,7 +31,6 @@
   "Capabilities": "Capacités",
   "capabilities.untrustedWorkspaces.desc": "Dans un espace de travail non approuvé, les serveurs MCP (.mcp) et l'écriture de fichiers (fs_write) sont désactivés ; tout le reste fonctionne.",
   "Click to view the summary": "Cliquez pour voir le résumé",
-  "Click to enlarge": "Cliquez pour agrandir",
   "Close (Esc)": "Fermer (Échap)",
   "cmd.compareVersion.title": "Comparer les versions (chat rendu)",
   "cmd.engine.delete.title": "Supprimer le moteur",

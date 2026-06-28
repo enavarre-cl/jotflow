@@ -301,4 +301,4 @@ export function initAutocomplete() {
   setupFileAutocomplete(inputEl);
 }
 
-export { setupEmojiAutocomplete, setupFileAutocomplete, handleSuggestKeydown, handleFileKeydown, onFileResults, insertAtCursor };
+export { setupEmojiAutocomplete, setupFileAutocomplete, handleSuggestKeydown, handleFileKeydown, onFileResults };

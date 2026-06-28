@@ -29,7 +29,9 @@ management and neural text‑to‑speech without leaving the editor.
 | ![Per-conversation settings panel](https://raw.githubusercontent.com/enavarre-cl/jotflow/master/media/img1.png) | ![Jotflow settings in VS Code](https://raw.githubusercontent.com/enavarre-cl/jotflow/master/media/img4.png) |
 
 - 💬 **Streaming** responses, token by token, with a **Stop** button and auto‑save after each turn.
-- 🧠 **Reasoning / thinking** panel for models that expose it.
+- 🧠 **Reasoning / thinking** and **Tools** panels for models that expose them — each panel's
+  **open/closed state is remembered per conversation** (saved in the `.chat`), so closing one keeps it
+  closed even while the next answer streams its reasoning or tool calls.
 - 📊 **Markdown + Mermaid** in chat bubbles: ` ```mermaid ` blocks render as diagrams with a
   GitHub‑style viewer — pan pad, zoom (pinch / `Ctrl`·`⌘`+wheel), **fullscreen** and **copy‑as‑image**.
   The library is lazy‑loaded only when a chat contains a diagram.
@@ -104,7 +106,8 @@ Jotflow can manage its **own Ollama server** without you installing anything:
 Each conversation is a **`.chat`** file (human‑readable JSON) storing the **inference config + full
 history**. Opening it shows the chat UI; everything is persisted in the file, so it is
 git‑versionable. A `.chat` may reference its system prompt from an external **`.md`** file
-(`systemPromptFile`, confined to the `.chat`'s directory).
+(`systemPromptFile`, confined to the `.chat`'s directory). View preferences travel with it too —
+e.g. whether the **Reasoning / Tools** panels are open (`ui`).
 
 ## Tools (function calling)
 
@@ -187,7 +190,10 @@ Jotflow is **MIT** licensed. It bundles or downloads third‑party components un
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for the release history. **2.3.x** adds **Chatterbox** voice‑cloning
+See [CHANGELOG.md](CHANGELOG.md) for the release history. **2.3.3** makes the **Reasoning / Tools**
+panels remember their open/closed state **per conversation** (so they stop popping back open while
+streaming), fixes the previously‑dead `jotflow.tts.chatterboxExaggeration` setting, and shows chat
+images at full bubble width. **2.3.x** adds **Chatterbox** voice‑cloning
 TTS (clone a voice from a YouTube fragment; fast 4‑bit MLX on Apple Silicon), an **engines management
 panel** (progress + RAM), and `@file` mentions while editing a message. **2.1.2** bundles the extension host with
 esbuild for a smaller, faster package. **2.1.1** is a security hardening pass that clears all GitHub

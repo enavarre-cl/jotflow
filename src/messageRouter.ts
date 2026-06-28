@@ -188,7 +188,15 @@ export async function routeMessage(msg: WebviewMessage, ctx: RouterCtx): Promise
           }
           break;
         case 'setConfig': {
-          if (ctx.busyRef.value) break; // do not mutate the doc while an inference is writing
+          if (ctx.busyRef.value) {
+            // A panel-visibility toggle (ui-only patch) is safe to apply mid-inference: it touches no
+            // field the in-flight request reads, and the turn's completing writeDoc persists it. Any
+            // heavier patch is still dropped while busy, to avoid racing the inference's doc writes.
+            const busyDoc = ctx.getDoc();
+            const p = msg.patch;
+            if (busyDoc && p && p.ui && Object.keys(p).length === 1) ctx.applyPatch(busyDoc, { ui: p.ui });
+            break;
+          }
           // Acquire the lock for the whole handler: it awaits writeDoc, loadModels and (on the
           // tools-on edge) a Trust dialog that can sit open for seconds — without holding busyRef a
           // concurrent `send` could start an inference that writes the doc underneath us.

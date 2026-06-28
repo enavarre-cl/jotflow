@@ -73,6 +73,13 @@ export interface ChatSummary {
   upTo: number;
 }
 
+/** Per-conversation view state persisted in the .chat. A boolean means the user explicitly set it
+ *  (true = open, false = closed → streaming must not auto-reopen); absent means default (auto-open). */
+export interface ChatUi {
+  thinkOpen?: boolean;
+  toolsOpen?: boolean;
+}
+
 export interface ChatDoc {
   version: number;
   title: string;
@@ -81,6 +88,7 @@ export interface ChatDoc {
   systemPrompt: string;
   systemPromptFile?: string; // path to a .md (relative to the .chat); takes precedence if present
   spellLang?: 'auto' | 'off' | 'es' | 'en'; // spell-checker language (per-chat). Absent/'auto' = system default
+  ui?: ChatUi; // per-conversation panel visibility (Reasoning/Tools); persisted in the .chat
   params: ChatParams;
   summary?: ChatSummary;
   usage?: TokenUsage; // accumulated token usage for the chat
@@ -216,6 +224,15 @@ export function parseDoc(text: string, defaults: ChatDefaults): ChatDoc {
       : undefined;
   if (usage && typeof raw.usage?.cost === 'number') usage.cost = raw.usage.cost;
 
+  let ui: ChatUi | undefined;
+  if (raw.ui && typeof raw.ui === 'object') {
+    const rui = raw.ui as { thinkOpen?: unknown; toolsOpen?: unknown };
+    const u: ChatUi = {};
+    if (typeof rui.thinkOpen === 'boolean') u.thinkOpen = rui.thinkOpen;
+    if (typeof rui.toolsOpen === 'boolean') u.toolsOpen = rui.toolsOpen;
+    if (Object.keys(u).length) ui = u;
+  }
+
   const doc: ChatDoc = {
     version: 2,
     title: typeof raw.title === 'string' ? raw.title : base.title,
@@ -225,6 +242,7 @@ export function parseDoc(text: string, defaults: ChatDefaults): ChatDoc {
     systemPromptFile: typeof raw.systemPromptFile === 'string' && raw.systemPromptFile ? raw.systemPromptFile : undefined,
     spellLang: typeof raw.spellLang === 'string' && ['auto', 'off', 'es', 'en'].includes(raw.spellLang)
       ? raw.spellLang as ChatDoc['spellLang'] : undefined,
+    ui,
     params,
     summary,
     usage,
@@ -305,7 +323,7 @@ export function parseDoc(text: string, defaults: ChatDefaults): ChatDoc {
 /** Top-level keys owned by the schema; anything else in a .chat is preserved via doc._extra. */
 const KNOWN_TOP_KEYS = new Set([
   'version', 'title', 'provider', 'model', 'systemPrompt', 'systemPromptFile',
-  'spellLang', 'params', 'summary', 'usage', 'messages',
+  'spellLang', 'ui', 'params', 'summary', 'usage', 'messages',
 ]);
 
 export function serializeDoc(doc: ChatDoc): string {
@@ -317,6 +335,7 @@ export function serializeDoc(doc: ChatDoc): string {
     systemPrompt: doc.systemPrompt,
     systemPromptFile: doc.systemPromptFile,
     spellLang: doc.spellLang,
+    ui: doc.ui,
     params: {
       temperature: doc.params.temperature,
       maxTokens: doc.params.maxTokens,

@@ -211,8 +211,6 @@ export function addMessage(role, content, opts) {
         if (a.kind === 'image') {
           const img = document.createElement('img');
           setImageSrc(img, a.mime, a.data);
-          img.title = t('Click to enlarge');
-          img.addEventListener('click', () => img.classList.toggle('zoomed'));
           att.appendChild(img);
         } else {
           const c = document.createElement('span');
@@ -295,5 +293,3 @@ export function startEditInline(el, index) {
     autosize();
     requestAnimationFrame(alignBottom);
   }
-
-export { copyImageToClipboard };

@@ -16,6 +16,7 @@ interface Window {
   JOTFLOW_NONCE?: string;
   DOWNLOADED_VOICES?: string[];
   PIPER_CUSTOM_SET?: boolean;
+  CHATTERBOX_EXAGGERATION?: number;
   SPELL_DICTS?: any;
   ClipboardItem?: any;
   webkitAudioContext?: any;

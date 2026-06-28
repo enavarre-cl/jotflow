@@ -31,7 +31,6 @@
   "Capabilities": "Recursos",
   "capabilities.untrustedWorkspaces.desc": "Em um workspace não confiável, os servidores MCP (.mcp) e a escrita de arquivos (fs_write) são desativados; o restante funciona.",
   "Click to view the summary": "Clique para ver o resumo",
-  "Click to enlarge": "Clique para ampliar",
   "Close (Esc)": "Fechar (Esc)",
   "cmd.compareVersion.title": "Comparar versões (chat renderizado)",
   "cmd.engine.delete.title": "Excluir motor",

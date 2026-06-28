@@ -34,9 +34,9 @@ const UI = {
 /** Builds the chat webview HTML (CSP + DOM + script/style tags). Pure given its inputs. */
 export function renderWebviewHtml(
   webview: vscode.Webview,
-  opts: { extensionUri: vscode.Uri; lang: string; bundle: Record<string, string>; downloadedVoices: string[]; piperCustomSet: boolean }
+  opts: { extensionUri: vscode.Uri; lang: string; bundle: Record<string, string>; downloadedVoices: string[]; piperCustomSet: boolean; chatterboxExaggeration: number }
 ): string {
-  const { extensionUri, lang, bundle, downloadedVoices, piperCustomSet } = opts;
+  const { extensionUri, lang, bundle, downloadedVoices, piperCustomSet, chatterboxExaggeration } = opts;
     const nonce = makeNonce();
     const uri = (f: string) =>
       webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', f));
@@ -220,6 +220,7 @@ export function renderWebviewHtml(
   };
   window.DOWNLOADED_VOICES = ${jsonForScript(downloadedVoices)};
   window.PIPER_CUSTOM_SET = ${jsonForScript(piperCustomSet)};
+  window.CHATTERBOX_EXAGGERATION = ${jsonForScript(chatterboxExaggeration)}; // seeds the TTS panel's Expressiveness slider
   window.I18N_LANG = ${jsonForScript(lang)};
   window.I18N_BUNDLE = ${jsonForScript(bundle)};
   window.MERMAID_SRC = '${uri('mermaid.min.js')}'; // lazy-loaded on first Mermaid block

@@ -14,7 +14,7 @@ import { refreshFind } from '../features/find.js';
 import { lastNStart } from '../panels/models.js';
 import { addMessage, bindThinking, disarmDelete } from './message.js';
 import { buildExportHtml } from './export.js';
-import { updateSide, openThink, openTools, showTools, showThinking } from './panels.js';
+import { updateSide, autoOpenThink, autoOpenTools, showTools, showThinking } from './panels.js';
 
 const messagesEl = $('messages');
 
@@ -341,7 +341,7 @@ export function streamStart() {
   resetStreamRender(); // start the incremental render fresh for this turn
   streamingEl = addMessage('assistant', '', { cursor: true });
 }
-export function streamReasoning(delta) { thinkingText += delta; openThink(); pendingThink = true; queueStreamRender(); }
+export function streamReasoning(delta) { thinkingText += delta; autoOpenThink(); pendingThink = true; queueStreamRender(); }
 export function streamDelta(delta) { streamingText += delta; pendingBody = true; queueStreamRender(); }
 export function streamEnd() {
   pendingBody = false; pendingThink = false; rafQueued = false;
@@ -366,7 +366,7 @@ export function streamError() {
     streamingEl = null;
   }
 }
-export function toolCall(name, args) { toolsLive.push({ name, args }); openTools(); showTools(toolsLive); }
+export function toolCall(name, args) { toolsLive.push({ name, args }); autoOpenTools(); showTools(toolsLive); }
 export function toolResult(name, content) {
   for (let k = toolsLive.length - 1; k >= 0; k--) {
     if (toolsLive[k].name === name && toolsLive[k].result === undefined) { toolsLive[k].result = content; break; }
@@ -378,5 +378,5 @@ export function showCurrentTools() { showTools(toolsLive); }
 export function resetTools() { toolsLive = []; showTools(toolsLive); }
 
 export function resetScroll() { stickToBottom = true; }
-export { showThinking, showTools, openThink, openTools, updateSide, scrollDown };
+export { showThinking, showTools, updateSide, scrollDown };
 export { buildExportHtml }; // moved to ./export.js; re-exported so app/main.js keeps its import path

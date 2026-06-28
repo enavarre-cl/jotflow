@@ -17,6 +17,7 @@ export interface ChatPatch {
   model?: string;
   systemPrompt?: string;
   spellLang?: string;
+  ui?: { thinkOpen?: boolean; toolsOpen?: boolean };
   params?: Record<string, unknown>;
 }
 
@@ -30,6 +31,12 @@ export function applyPatch(doc: ChatDoc, patch: ChatPatch | null | undefined): v
   if (typeof patch.systemPrompt === 'string') doc.systemPrompt = patch.systemPrompt;
   if (typeof patch.spellLang === 'string' && ['auto', 'off', ...SPELL_LANGS].includes(patch.spellLang)) {
     doc.spellLang = patch.spellLang as ChatDoc['spellLang'];
+  }
+
+  if (patch.ui && typeof patch.ui === 'object') {
+    doc.ui = doc.ui || {};
+    if (typeof patch.ui.thinkOpen === 'boolean') doc.ui.thinkOpen = patch.ui.thinkOpen;
+    if (typeof patch.ui.toolsOpen === 'boolean') doc.ui.toolsOpen = patch.ui.toolsOpen;
   }
 
   const p = patch.params;

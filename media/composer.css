@@ -334,23 +334,12 @@
   gap: 6px;
   margin-top: 6px;
 }
+/* Images fill the view width with proportional height (each on its own row). */
 .msg-attachments img {
-  max-width: 220px;
-  max-height: 220px;
+  width: 100%;
+  height: auto;
   border-radius: 8px;
   border: 1px solid var(--vscode-panel-border);
-  cursor: zoom-in;
-}
-/* Generated images (assistant) ARE the content, not a thumbnail: show them large. */
-.msg.assistant .msg-attachments img {
-  max-width: min(100%, 512px);
-  max-height: 70vh;
-}
-/* Click to toggle full size (any image). !important to beat the per-role rule above (more classes). */
-.msg-attachments img.zoomed {
-  max-width: 100% !important;
-  max-height: 90vh !important;
-  cursor: zoom-out;
 }
 .file-chip {
   font-size: 11px;

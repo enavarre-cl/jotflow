@@ -13,6 +13,7 @@ import { initTts } from '../features/tts.js';
 import { renderConfig, patchConfig } from '../panels/config.js';
 import { updateModelCtx, modelSelect } from '../panels/models.js';
 import { updateSide, showCurrentTools, buildExportHtml } from '../chat/conversation.js';
+import { openThink, openTools, dismissThink, dismissTools } from '../chat/panels.js';
 import { openFind, closeFind, setReplaceVisible } from '../features/find.js';
 import { handleMessage } from './protocol.js';
 
@@ -66,10 +67,10 @@ $('exportBtn').addEventListener('click', () => {
   const doc = getDoc();
   vscode.postMessage({ type: 'exportHtml', title: (doc && doc.title) || 'Chat', html: buildExportHtml() });
 });
-$('thinkBtn').addEventListener('click', () => { thinkPanel.classList.toggle('hidden'); updateSide(); });
-$('thinkClose').addEventListener('click', () => { thinkPanel.classList.add('hidden'); updateSide(); });
-$('toolsBtn').addEventListener('click', () => { if (toolsPanel.classList.contains('hidden')) showCurrentTools(); toolsPanel.classList.toggle('hidden'); updateSide(); });
-$('toolsClose').addEventListener('click', () => { toolsPanel.classList.add('hidden'); updateSide(); });
+$('thinkBtn').addEventListener('click', () => { if (thinkPanel.classList.contains('hidden')) openThink(); else dismissThink(); });
+$('thinkClose').addEventListener('click', () => dismissThink());
+$('toolsBtn').addEventListener('click', () => { if (toolsPanel.classList.contains('hidden')) { showCurrentTools(); openTools(); } else dismissTools(); });
+$('toolsClose').addEventListener('click', () => dismissTools());
 
 // ---- Messages from the extension ----
 window.addEventListener('message', (event) => handleMessage(event.data));

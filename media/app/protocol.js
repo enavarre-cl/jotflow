@@ -14,6 +14,7 @@ import {
   toolCall, toolResult,
 } from '../chat/conversation.js';
 import { setStreaming, setSummarizing } from '../chat/composer.js';
+import { applyPanelState } from '../chat/panels.js';
 import { notice, showSummarizing, hideSummarizing, showTtsProgress, hideTtsProgress } from '../ui/notifications.js';
 
 const providerSelect = /** @type {HTMLSelectElement} */ ($('providerSelect'));
@@ -22,7 +23,7 @@ const configPanel = $('config');
 
 // Applies a language: translates static HTML and re-renders dynamic content. `bundle` is the
 // active language's translations (sent fresh on a live change so any locale works, not just es).
-export function applyLanguage(lang, bundle) {
+function applyLanguage(lang, bundle) {
   window.LangI18n.set(lang);
   if (bundle) window.LangI18n.setBundle(bundle);
   window.LangI18n.applyStatic(document);
@@ -58,6 +59,7 @@ export function handleMessage(msg) {
       providerSelect.value = doc.provider;
       if (spellSelect) spellSelect.value = doc.spellLang || 'auto'; // per-chat spell-checker language
       applySpellLang();
+      applyPanelState(doc); // restore the per-conversation Reasoning/Tools panel visibility
       renderConfig();
       renderConversation();
       updateContextBar();

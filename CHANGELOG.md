@@ -5,6 +5,37 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.3.3] - 2026-06-27
+
+### Added
+- **The Reasoning & Tools panels remember their open/closed state per conversation**, persisted in
+  the `.chat`. Closing a panel now sticks: streaming reasoning or a tool call **no longer pops a panel
+  back open** once you've closed it, and a panel you pinned open is restored when you reopen the chat.
+  Stored as an optional `ui` object (`thinkOpen` / `toolsOpen`) — chats predating this stay untouched
+  (absent = the previous behavior: closed, auto-opens while streaming). A close made **mid-stream** is
+  applied to the in-memory doc and saved by the turn's own write (the `setConfig` busy-lock lets a
+  ui-only patch through, since it touches nothing the in-flight request reads).
+
+### Fixed
+- **`jotflow.tts.chatterboxExaggeration` was a dead setting** — declared in Settings but never read,
+  so changing it did nothing (the value came only from the in-panel slider's webview state). It is now
+  wired the same way as `tts.piperModel`: read on the host and injected into the webview, where it
+  **seeds the Expressiveness slider** (the saved per-chat value still overrides once you move it).
+
+### Changed
+- **Images in chat bubbles now fill the view width at proportional height**, instead of a 220 px
+  click-to-enlarge thumbnail (512 px for generated images). The click-to-zoom toggle was removed.
+
+### Internal
+- **Dead-code sweep** (M6): removed an unused `i18n` re-export (`core/i18n.js`), a never-subscribed
+  pub/sub mechanism in the doc store (`ui/store.js`), the now-orphan `Click to enlarge` localization
+  key from all six `package.nls.*`, and trimmed six functions that were exported but only used inside
+  their own module (`send`/`addFiles`/`renderPending`, `copyImageToClipboard`, `insertAtCursor`,
+  `applyLanguage`). `tsc`, `eslint src` and `node --check media/*.js` clean.
+- **Tests (V3/V5):** `applyPatch.test.ts` gains coverage for the new `ui` patch (boolean validation,
+  partial updates) and a `parseDoc`/`serializeDoc` `ui` round-trip (absent → no key; corrupt value
+  dropped). Suite: **95 tests, all passing**.
+
 ## [2.3.2] - 2026-06-27
 
 ### Changed

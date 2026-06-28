@@ -39,8 +39,10 @@ export const tts = {
     // ready from the first render; the 'piperVoices' message updates it live.
     downloadedVoices: new Set(Array.isArray(window.DOWNLOADED_VOICES) ? window.DOWNLOADED_VOICES : []),
     customSet: !!window.PIPER_CUSTOM_SET, // is there a custom .onnx path configured in Settings?
-    // Preferences persisted in the webview state.
-    prefs: Object.assign({ engine: 'system', voiceURI: '', rate: 1, piperVoice: 'es_MX-claude-high', chatterboxVoice: '', exaggeration: 0.5 }, (vscode.getState() && vscode.getState().tts) || {}),
+    // Preferences persisted in the webview state. `exaggeration` is seeded from the
+    // jotflow.tts.chatterboxExaggeration setting (injected as window.CHATTERBOX_EXAGGERATION);
+    // once the panel slider is touched, the saved state below overrides it.
+    prefs: Object.assign({ engine: 'system', voiceURI: '', rate: 1, piperVoice: 'es_MX-claude-high', chatterboxVoice: '', exaggeration: (typeof window.CHATTERBOX_EXAGGERATION === 'number' ? window.CHATTERBOX_EXAGGERATION : 0.5) }, (vscode.getState() && vscode.getState().tts) || {}),
     speakingBtn: null, // active 🔊 button (to toggle the icon)
     msgId: null,       // id of the message being read (to stop if deleted)
     ctx: null,         // AudioContext (Web Audio): unlocked on click

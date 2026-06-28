@@ -31,7 +31,6 @@
   "Capabilities": "Funzionalità",
   "capabilities.untrustedWorkspaces.desc": "In un workspace non attendibile vengono disattivati i server MCP (.mcp) e la scrittura di file (fs_write); il resto funziona.",
   "Click to view the summary": "Clicca per vedere il riepilogo",
-  "Click to enlarge": "Clicca per ingrandire",
   "Close (Esc)": "Chiudi (Esc)",
   "cmd.compareVersion.title": "Confronta versioni (chat renderizzata)",
   "cmd.engine.delete.title": "Elimina motore",

@@ -31,7 +31,6 @@
   "Capabilities": "Funktionen",
   "capabilities.untrustedWorkspaces.desc": "In einem nicht vertrauenswürdigen Workspace sind MCP-Server (.mcp) und das Schreiben von Dateien (fs_write) deaktiviert; alles andere funktioniert.",
   "Click to view the summary": "Zum Anzeigen der Zusammenfassung klicken",
-  "Click to enlarge": "Zum Vergrößern klicken",
   "Close (Esc)": "Schließen (Esc)",
   "cmd.compareVersion.title": "Versionen vergleichen (gerenderter Chat)",
   "cmd.engine.delete.title": "Engine löschen",

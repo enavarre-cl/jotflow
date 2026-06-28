@@ -196,4 +196,4 @@ export function initComposer() {
   applyZoom();
 }
 
-export { send, addFiles, renderPending, setZoom };
+export { setZoom };
