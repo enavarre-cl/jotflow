@@ -5,6 +5,17 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.6.5] - 2026-06-28
+
+### Internal
+- **Typed the webview ambient globals (`media/globals.d.ts`), removing the `any`s.** `LangI18n`,
+  `LangSpell` and the lazy-loaded `mermaid` global now have real interfaces (matching the methods the
+  code actually calls); `SPELL_DICTS` is `Record<string, {aff, dic}>`; the VS Code webview state is a
+  typed `WebviewState` (`zoom` + `tts`) instead of `any`; `ClipboardItem` comes from `lib.dom` (the
+  hand-rolled `any` override is gone); `webkitAudioContext` is `typeof AudioContext`. Dropped the dead
+  `PMd`/`PMermaid`/`PFind` legacy bridges. Typing surfaced (and documented) that the per-webview state
+  holds both the chat zoom and the TTS prefs. Gate green, bundle valid, 127 tests pass.
+
 ## [2.6.4] - 2026-06-28
 
 ### Internal
