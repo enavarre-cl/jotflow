@@ -125,7 +125,6 @@ export function registerLocalModels(context: vscode.ExtensionContext, deps: Loca
       state: () => piper.isInstalled() ? { status: piper.isServerRunning() ? 'running' : 'stopped' } : { status: 'notinstalled' },
       pid: () => piper.serverPid(),
       install: async (report) => { await piper.install((m) => report(m, progressPct(m))); refreshTrees(); },
-      update: async (report) => { await piper.update((m) => report(m, progressPct(m))); refreshTrees(); },
       start: async (report) => {
         const model = piper.firstVoiceModel();
         if (!model) throw new Error(tr('Download a voice first from the Voices section.'));
@@ -142,7 +141,6 @@ export function registerLocalModels(context: vscode.ExtensionContext, deps: Loca
       state: () => chatterbox.isInstalled() ? { status: chatterbox.isServerRunning() ? 'running' : 'stopped' } : { status: 'notinstalled' },
       pid: () => chatterbox.serverPid(),
       install: async (report) => { await chatterbox.install(report); refreshTrees(); }, // install emits stepped %
-      update: async (report) => { await chatterbox.update((m) => report(m, progressPct(m))); refreshTrees(); },
       start: async (report) => { await chatterbox.ensureServer((m) => report(m, progressPct(m))); refreshTrees(); },
       stop: () => { chatterbox.stopServer(); refreshTrees(); },
       remove: async () => { if (!(await confirmDeleteEngine('Chatterbox'))) return false; chatterbox.delete(); voicesChanged.fire(); refreshTrees(); return true; },
@@ -197,15 +195,6 @@ export function registerLocalModels(context: vscode.ExtensionContext, deps: Loca
       refreshTrees();
     }),
     vscode.commands.registerCommand('jotflow.chatterbox.stopServer', () => { chatterbox.stopServer(); refreshTrees(); }),
-    vscode.commands.registerCommand('jotflow.chatterbox.update', async () => {
-      try {
-        await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: tr('Updating Chatterbox…') },
-          (p) => chatterbox.update((m) => p.report({ message: m }))
-        );
-      } catch (e) { vscode.window.showErrorMessage(`Chatterbox: ${errMsg(e)}`); }
-      refreshTrees();
-    }),
     vscode.commands.registerCommand('jotflow.chatterbox.removeVoice', async (item: ModelsTreeItem) => {
       const id = item?.word; // the voice node carries its id in `word`
       if (typeof id !== 'string') return;

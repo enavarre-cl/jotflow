@@ -78,10 +78,12 @@ files) or repositories opened without trust.
   watermark by design; this is a property of the upstream model, noted for transparency.
 - **`yt-dlp` is installed unpinned (latest).** YouTube actively breaks older yt-dlp releases (nsig /
   SABR changes), so a pinned version ships a feature that stops working within weeks; yt-dlp's own
-  guidance is to always run the latest. pip still verifies the resolved version's hash against the
-  immutable PyPI index, the spawn uses an argv array (no shell), and the URL is host-allowlisted — so
-  the residual is "a future yt-dlp release on PyPI is itself malicious", the same class as the
-  unpinned-transitive-deps risk already accepted above.
+  guidance is to always run the latest. A **failed extraction auto-upgrades yt-dlp to the latest and
+  retries once** (there is no manual "update engine" button), so the engine self-heals when YouTube
+  changes — this only ever installs from PyPI through the same `pip` path. pip still verifies the
+  resolved version's hash against the immutable PyPI index, the spawn uses an argv array (no shell),
+  and the URL is host-allowlisted — so the residual is "a future yt-dlp release on PyPI is itself
+  malicious", the same class as the unpinned-transitive-deps risk already accepted above.
 
 ## Static analysis (CodeQL)
 

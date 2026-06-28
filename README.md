@@ -42,7 +42,7 @@ management and neural text‑to‑speech without leaving the editor.
   fragment** (paste a URL + a `mm:ss` range) or a local audio clip, and read messages aloud in it.
   Each cloned voice carries its language (multilingual). On **Apple Silicon** it runs a fast 4‑bit
   model via MLX; other platforms use PyTorch.
-- 🎛️ **Engines panel**: install / start / stop / update / delete each local engine (Ollama · Piper ·
+- 🎛️ **Engines panel**: install / start / stop / delete each local engine (Ollama · Piper ·
   Chatterbox) from one view, with download sources, a live progress bar and the RAM each engine uses.
 - 🔎 **Find & replace in chat** (`Ctrl/Cmd+F` find · `Ctrl/Cmd+H` replace), 🔍 **zoom** (`Alt`/`Option` + wheel), 🌳 **fork**,
   🕓 **compare versions**, ♻️ **regenerate / continue / merge / edit / delete** messages.
@@ -86,7 +86,7 @@ Configure any of these per conversation (in the ⚙ panel) or as the default in 
 Jotflow can manage its **own Ollama server** without you installing anything:
 
 - The **Jotflow** sidebar groups everything into sections: **Engines** (Ollama / Piper / Chatterbox —
-  manage them from the **gear** (⚙) in the Engines view: install/start/stop/update/delete with a live
+  manage them from the **gear** (⚙) in the Engines view: install/start/stop/delete with a live
   progress bar and RAM usage), **Models** (local models + downloads), **Voices** (grouped by engine ›
   language › voice) and **Dictionary**.
 - The **＋** button opens an **LM Studio‑style explorer**. By default it browses the **Ollama

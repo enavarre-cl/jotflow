@@ -71,7 +71,6 @@
   "view.voices.name": "Voices",
   "cmd.chatterbox.startServer.title": "Start Chatterbox server",
   "cmd.chatterbox.stopServer.title": "Stop Chatterbox server",
-  "cmd.chatterbox.update.title": "Update Chatterbox",
   "cmd.chatterbox.removeVoice.title": "Delete voice",
   "config.tts.chatterboxModel.desc": "Chatterbox model: **multilingual** (default — 23 languages; each voice speaks its own language automatically) or **english** (lighter, English only).",
   "config.tts.chatterboxDevice.desc": "Compute device for Chatterbox: **auto** (MPS on Apple Silicon, CUDA if available, else CPU), or force one. CPU is slow.",

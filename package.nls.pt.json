@@ -371,7 +371,6 @@
   "Something went wrong handling that action.": "Algo deu errado ao processar essa ação.",
   "cmd.chatterbox.startServer.title": "Iniciar servidor Chatterbox",
   "cmd.chatterbox.stopServer.title": "Parar servidor Chatterbox",
-  "cmd.chatterbox.update.title": "Atualizar Chatterbox",
   "cmd.chatterbox.removeVoice.title": "Excluir voz",
   "config.tts.chatterboxModel.desc": "Modelo do Chatterbox: **multilingual** (padrão — 23 idiomas; cada voz fala seu próprio idioma) ou **english** (mais leve, só inglês).",
   "config.tts.chatterboxDevice.desc": "Dispositivo de computação do Chatterbox: **auto** (MPS no Apple Silicon, CUDA se disponível, senão CPU), ou force um. A CPU é lenta.",

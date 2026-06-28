@@ -5,6 +5,16 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.3.2] - 2026-06-27
+
+### Changed
+- **Removed the "Update" button from the engines panel/tree** (Piper · Chatterbox). Engine versions
+  are **pinned by the extension**, so "Update" only re-installed the same pin — a no-op that implied a
+  non-existent "check for a newer version". Engines now update when the extension itself updates.
+- **`yt-dlp` now self-heals**: instead of a manual update button, a failed YouTube extraction
+  **auto-upgrades yt-dlp to the latest and retries once** (YouTube routinely breaks older releases) —
+  fixing the one thing that genuinely needed updating, exactly when it bites.
+
 ## [2.3.1] - 2026-06-27
 
 ### Fixed

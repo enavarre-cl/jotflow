@@ -322,7 +322,7 @@ export class ChatterboxManager {
       notify?.(tr('Downloading the audio fragment…'));
       // Download ONLY the requested section, extract to WAV via the bundled ffmpeg. argv array → the
       // URL never reaches a shell.
-      await this.run(this.ytDlpBin(), [
+      const ytArgs = [
         '--no-playlist', '--no-progress',
         '--download-sections', formatSections(range.start, range.end),
         '--force-keyframes-at-cuts',
@@ -330,7 +330,15 @@ export class ChatterboxManager {
         '--ffmpeg-location', ffmpeg,
         '-o', path.join(voicesDir, id + '.src.%(ext)s'),
         req.url,
-      ], 180000);
+      ];
+      try {
+        await this.run(this.ytDlpBin(), ytArgs, 180000);
+      } catch {
+        // YouTube routinely breaks older yt-dlp (nsig/SABR). Auto-upgrade it and retry once.
+        notify?.(tr('Updating yt-dlp and retrying…'));
+        await this.upgradeYtDlp(notify);
+        await this.run(this.ytDlpBin(), ytArgs, 180000);
+      }
       if (!fs.existsSync(srcWav)) throw new Error('yt-dlp produced no audio');
     } else if (req.filePath) {
       if (!fs.existsSync(req.filePath)) throw new Error('file not found');
@@ -353,20 +361,13 @@ export class ChatterboxManager {
 
   // ───────────────────────── Lifecycle ─────────────────────────
 
-  /** Updates the engine (pip upgrade of the pinned versions). */
-  async update(notify?: Notify): Promise<void> {
-    this.stopServer();
+  /** Upgrades yt-dlp to the latest. YouTube routinely breaks older releases (nsig/SABR), so this is
+   *  called to auto-recover when an extraction fails — the engine itself is version-pinned. */
+  private async upgradeYtDlp(notify?: Notify): Promise<void> {
     const venvPy = this.venvPython();
-    if (fs.existsSync(venvPy)) {
-      const ttsPkgs = IS_APPLE_SILICON
-        ? [`mlx-audio==${MLX_AUDIO_VERSION}`]
-        : [`chatterbox-tts==${CHATTERBOX_TTS_VERSION}`, 'setuptools<81'];
-      await this.py.runCmd(venvPy, ['-m', 'pip', 'install', '--upgrade',
-        ...ttsPkgs, YT_DLP_SPEC, `imageio-ffmpeg==${IMAGEIO_FFMPEG_VERSION}`],
-        (l) => { if (/downloading|installing|\d+\s*%|\bMB\b|\bGB\b/i.test(l)) notify?.(l.slice(0, 140)); });
-    }
-    this.ffmpegBin = null;
-    notify?.(tr('Chatterbox updated.'));
+    if (!fs.existsSync(venvPy)) return;
+    await this.py.runCmd(venvPy, ['-m', 'pip', 'install', '--upgrade', YT_DLP_SPEC],
+      (l) => { if (/downloading|installing|\d+\s*%|\bMB\b/i.test(l)) notify?.(l.slice(0, 140)); });
   }
 
   /** Deletes the engine (venv), the downloaded weights and the reference clips. The shared
