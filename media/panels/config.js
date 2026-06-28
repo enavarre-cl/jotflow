@@ -4,7 +4,7 @@
  */
 import { t } from '../core/i18n.js';
 import { vscode } from '../core/vscode.js';
-import { $, escapeHtml } from '../core/dom.js';
+import { $ } from '../core/dom.js';
 import { getDoc } from '../ui/store.js';
 import { tts } from '../features/tts.js';
 import { updateContextBar } from './models.js';
@@ -15,20 +15,24 @@ const configFields = $('configFields');
 
 const SLIDER_STEP = 0.01; // decimal precision for fractional sliders/number inputs
 
-// Configuration panel schema. `only` restricts a parameter to certain backends.
+// Configuration panel schema: collapsible sections (`id` persisted in doc.ui.configSections, `hint`
+// is the collapsed-state subtitle). `only` restricts a parameter to certain backends; a section whose
+// items are all filtered out for the active backend is hidden.
   const SCHEMA = [
-    { group: 'General', items: [
+    { id: 'response', title: 'Response', hint: 'temperature · length · stop', items: [
       { key: 'temperature', label: 'Temperature', kind: 'slider', min: 0, max: 2, step: SLIDER_STEP, toggle: false },
       { key: 'maxTokens', label: 'Limit response length', kind: 'int', min: 1, max: 131072, step: 1, toggle: true },
-      { key: 'contextMessages', label: 'History to send: last N messages', kind: 'int', min: 1, max: 500, step: 1, toggle: true },
-      { key: 'autoSummary', label: 'Auto-summarize when context fills up', kind: 'bool' },
-      { key: 'contextLength', label: 'Model window: num_ctx (tokens)', kind: 'int', min: 256, max: 131072, step: 256, toggle: true, only: ['ollama'] },
-      { key: 'numThreads', label: 'CPU Threads', kind: 'slider', min: 1, max: 32, step: 1, toggle: true, only: ['ollama'] },
-      { key: 'thinking', label: 'Reasoning / thinking', kind: 'bool', only: ['gemini', 'anthropic', 'openrouter', 'ollama'] },
-      { key: 'tools', label: 'Tools: workspace filesystem + MCP servers (.mcp)', kind: 'bool', only: ['openai', 'openrouter', 'gemini', 'anthropic', 'ollama'] },
       { key: 'stop', label: 'Stop Strings', kind: 'tags' },
     ] },
-    { group: 'Sampling', items: [
+    { id: 'context', title: 'Context', hint: 'history · summarize', items: [
+      { key: 'contextMessages', label: 'History to send: last N messages', kind: 'int', min: 1, max: 500, step: 1, toggle: true },
+      { key: 'autoSummary', label: 'Auto-summarize when context fills up', kind: 'bool' },
+    ] },
+    { id: 'capabilities', title: 'Capabilities', hint: 'reasoning · tools', items: [
+      { key: 'thinking', label: 'Reasoning / thinking', kind: 'bool', only: ['gemini', 'anthropic', 'openrouter', 'ollama'] },
+      { key: 'tools', label: 'Tools: workspace filesystem + MCP servers (.mcp)', kind: 'bool', only: ['openai', 'openrouter', 'gemini', 'anthropic', 'ollama'] },
+    ] },
+    { id: 'sampling', title: 'Sampling', hint: 'top-k/p · penalties · seed', items: [
       { key: 'topK', label: 'Top K Sampling', kind: 'int', min: 0, max: 500, step: 1, toggle: true },
       { key: 'topP', label: 'Top P Sampling', kind: 'slider', min: 0, max: 1, step: SLIDER_STEP, toggle: true },
       { key: 'minP', label: 'Min P Sampling', kind: 'slider', min: 0, max: 1, step: SLIDER_STEP, toggle: true, only: ['openai', 'ollama', 'openrouter'] },
@@ -38,7 +42,31 @@ const SLIDER_STEP = 0.01; // decimal precision for fractional sliders/number inp
       { key: 'frequencyPenalty', label: 'Frequency Penalty', kind: 'number', min: -2, max: 2, step: SLIDER_STEP, toggle: true, only: ['openai', 'ollama', 'openrouter', 'gemini'] },
       { key: 'seed', label: 'Seed', kind: 'int', min: 0, max: 2147483647, step: 1, toggle: true, only: ['openai', 'ollama', 'openrouter', 'gemini'] },
     ] },
+    { id: 'engine', title: 'Engine · Ollama', hint: 'context window · threads', items: [
+      { key: 'contextLength', label: 'Model window: num_ctx (tokens)', kind: 'int', min: 256, max: 131072, step: 256, toggle: true, only: ['ollama'] },
+      { key: 'numThreads', label: 'CPU Threads', kind: 'slider', min: 1, max: 32, step: 1, toggle: true, only: ['ollama'] },
+    ] },
   ];
+
+  // Section ids expanded by default when a chat opens (everything else collapsed). The system prompt
+  // is the headline editing surface, so it starts open; the parameter knobs stay tucked away.
+  const DEFAULT_OPEN_SECTIONS = ['sysprompt'];
+
+  // Effective open set: the persisted ids (even []), else the default. Read fresh each render.
+  function openSections() {
+    const ui = getDoc() && getDoc().ui;
+    return ui && Array.isArray(ui.configSections) ? ui.configSections : DEFAULT_OPEN_SECTIONS;
+  }
+
+  // Persists the open/closed set into doc.ui.configSections via the same setConfig path as the
+  // Reasoning/Tools panels (host merges into doc.ui; its own write is de-duped, so no re-render).
+  function setSectionOpen(id, open) {
+    const cur = openSections();
+    const next = open ? [...new Set([...cur, id])] : cur.filter((s) => s !== id);
+    const doc = getDoc();
+    if (doc) doc.ui = Object.assign({}, doc.ui, { configSections: next });
+    vscode.postMessage({ type: 'setConfig', patch: { ui: { configSections: next } } });
+  }
 
   function patchConfig(patch) {
     const doc = getDoc();
@@ -63,26 +91,62 @@ const SLIDER_STEP = 0.01; // decimal precision for fractional sliders/number inp
   function renderConfig() {
     const doc = getDoc();
     if (!doc) return;
-    // Backend and model are static in the HTML; here only system prompt + parameters.
+    // Backend and model are static in the HTML; here only system prompt + parameters, as a set of
+    // collapsible sections (collapsed by default; state persisted per chat in doc.ui.configSections).
     configFields.innerHTML = '';
 
     // System prompt: an always-editable inline base + ordered .md layers, concatenated at send time.
-    configFields.appendChild(fieldRow('System prompt', sysPromptControl(doc)));
+    const sys = cfgSection('sysprompt', 'System prompt', '');
+    sys.body.appendChild(sysPromptControl(doc));
+    configFields.appendChild(sys.section);
 
-    // Parameter groups, filtered by the active backend (hides empty groups).
+    // Parameter sections, filtered by the active backend (a fully-filtered section is skipped).
     const provider = doc.provider;
-    for (const section of SCHEMA) {
-      const items = section.items.filter((it) => !it.only || it.only.includes(provider));
+    for (const group of SCHEMA) {
+      const items = group.items.filter((it) => !it.only || it.only.includes(provider));
       if (!items.length) continue;
-      const h = document.createElement('div');
-      h.className = 'group-head';
-      h.textContent = t(section.group);
-      configFields.appendChild(h);
-      for (const item of items) configFields.appendChild(paramRow(item));
+      const sec = cfgSection(group.id, group.title, group.hint);
+      for (const item of items) sec.body.appendChild(paramRow(item));
+      configFields.appendChild(sec.section);
     }
 
-    // Read aloud (system engine or neural Piper).
-    renderTtsConfig();
+    // Read aloud (system engine / Piper / Chatterbox) — its own collapsible section.
+    const aloud = cfgSection('readaloud', 'Read aloud', 'voice · speed');
+    renderTtsConfig(aloud.body);
+    configFields.appendChild(aloud.section);
+  }
+
+  // Builds one collapsible section: a clickable header (chevron + title + collapsed-state hint) and a
+  // body the caller fills. Toggling flips a CSS class in place (no re-render) and persists the set.
+  function cfgSection(id, title, hint) {
+    const section = document.createElement('div');
+    section.className = 'cfg-section' + (openSections().includes(id) ? '' : ' collapsed');
+
+    const head = document.createElement('button');
+    head.type = 'button';
+    head.className = 'cfg-section__head';
+    const chev = document.createElement('span');
+    chev.className = 'cfg-section__chev'; // the disclosure triangle is drawn in CSS (border triangle)
+    const titleEl = document.createElement('span');
+    titleEl.className = 'cfg-section__title';
+    titleEl.textContent = t(title);
+    const hintEl = document.createElement('span');
+    hintEl.className = 'cfg-section__hint';
+    if (hint) hintEl.textContent = t(hint);
+    head.appendChild(chev);
+    head.appendChild(titleEl);
+    head.appendChild(hintEl);
+    head.addEventListener('click', () => {
+      const collapsed = section.classList.toggle('collapsed');
+      setSectionOpen(id, !collapsed);
+    });
+
+    const body = document.createElement('div');
+    body.className = 'cfg-section__body';
+
+    section.appendChild(head);
+    section.appendChild(body);
+    return { section, body };
   }
 
   function fieldRow(label, control) {
@@ -181,7 +245,13 @@ const SLIDER_STEP = 0.01; // decimal precision for fractional sliders/number inp
   }
 
   function paramRowTags(item, p, row) {
-    row.appendChild(tagsControl(item, p));
+    // Standardize on the .cfg-row label-over-control layout (same as Engine/Voice): a plain <label>
+    // above the control with a 4px gap — not the .param-head value-row layout (label + number box).
+    row.className = 'cfg-row';
+    const lab = document.createElement('label');
+    lab.textContent = t(item.label);
+    row.appendChild(lab);
+    row.appendChild(tagsBox(p));
     return row;
   }
 
@@ -285,14 +355,9 @@ const SLIDER_STEP = 0.01; // decimal precision for fractional sliders/number inp
     return Math.min(item.max, Math.max(item.min, v));
   }
 
-  function tagsControl(item, p) {
-    const wrap = document.createElement('div');
-    wrap.className = 'param-head';
-    const lab = document.createElement('div');
-    lab.className = 'param-label';
-    lab.innerHTML = '<span>' + escapeHtml(t(item.label)) + '</span>';
-    wrap.appendChild(lab);
-
+  // The stop-strings editor: a .tags box of removable chips + a free-text input. The label and the
+  // row layout come from paramRowTags (a standard .cfg-row), so only the box is built here.
+  function tagsBox(p) {
     const box = document.createElement('div');
     box.className = 'tags';
     const stops = Array.isArray(p.stop) ? p.stop.slice() : [];
@@ -323,11 +388,7 @@ const SLIDER_STEP = 0.01; // decimal precision for fractional sliders/number inp
       box.appendChild(input);
     }
     render();
-
-    const outer = document.createElement('div');
-    outer.appendChild(wrap);
-    outer.appendChild(box);
-    return outer;
+    return box;
   }
 
 export { renderConfig, patchConfig, fieldRow };

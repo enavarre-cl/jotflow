@@ -17,7 +17,7 @@ export interface ChatPatch {
   model?: string;
   systemPrompt?: string;
   spellLang?: string;
-  ui?: { thinkOpen?: boolean; toolsOpen?: boolean };
+  ui?: { thinkOpen?: boolean; toolsOpen?: boolean; configSections?: string[]; zoom?: number };
   params?: Record<string, unknown>;
 }
 
@@ -37,6 +37,10 @@ export function applyPatch(doc: ChatDoc, patch: ChatPatch | null | undefined): v
     doc.ui = doc.ui || {};
     if (typeof patch.ui.thinkOpen === 'boolean') doc.ui.thinkOpen = patch.ui.thinkOpen;
     if (typeof patch.ui.toolsOpen === 'boolean') doc.ui.toolsOpen = patch.ui.toolsOpen;
+    if (Array.isArray(patch.ui.configSections)) {
+      doc.ui.configSections = patch.ui.configSections.filter((s): s is string => typeof s === 'string');
+    }
+    if (typeof patch.ui.zoom === 'number' && Number.isFinite(patch.ui.zoom)) doc.ui.zoom = patch.ui.zoom;
   }
 
   const p = patch.params;

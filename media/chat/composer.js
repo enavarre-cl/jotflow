@@ -129,7 +129,10 @@ function send() {
 }
 
 // ---- Chat-local zoom (independent of VS Code global zoom) ----
+  // Persisted per conversation in doc.ui.zoom (travels with the .chat). vscode.getState() is kept as a
+  // fast local cache so the level is restored instantly on reload, before the doc message arrives.
   let zoom = LangZoom.clampZoom((vscode.getState() && vscode.getState().zoom) || 1);
+  let zoomPersistTimer = 0;
   function applyZoom() {
     // Zoom ONLY the history (which has its own scroll), not the whole body: zooming the body
     // scaled the 100vh layout and overflowed/clipped the composer (the input bar).
@@ -141,7 +144,20 @@ function send() {
     s.zoom = zoom;
     vscode.setState(s);
   }
-  function setZoom(z) { zoom = LangZoom.clampZoom(z); applyZoom(); }
+  // Debounced write to the .chat (wheel zoom fires rapidly; coalesce into one persisted value).
+  function persistZoom() {
+    const doc = getDoc();
+    if (doc) doc.ui = Object.assign({}, doc.ui, { zoom });
+    clearTimeout(zoomPersistTimer);
+    zoomPersistTimer = setTimeout(() => vscode.postMessage({ type: 'setConfig', patch: { ui: { zoom } } }), 400);
+  }
+  function setZoom(z) { zoom = LangZoom.clampZoom(z); applyZoom(); persistZoom(); }
+
+  // Applies the zoom persisted in the loaded conversation (no re-persist). Called when a doc arrives.
+  export function applyDocZoom(doc) {
+    const z = doc && doc.ui && doc.ui.zoom;
+    if (typeof z === 'number' && isFinite(z)) { zoom = LangZoom.clampZoom(z); applyZoom(); }
+  }
 
 // Wires all composer DOM events. Called once at startup.
 export function initComposer() {
@@ -189,6 +205,7 @@ export function initComposer() {
     e.preventDefault();
     zoom = LangZoom.stepZoom(zoom, e.deltaY);
     applyZoom();
+    persistZoom();
   }, { passive: false });
   $('zoomInBtn').addEventListener('click', () => setZoom(LangZoom.stepZoom(zoom, -1)));
   $('zoomOutBtn').addEventListener('click', () => setZoom(LangZoom.stepZoom(zoom, 1)));

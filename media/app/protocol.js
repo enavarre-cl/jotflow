@@ -13,7 +13,7 @@ import {
   renderConversation, streamStart, streamReasoning, streamDelta, streamEnd, streamError,
   toolCall, toolResult,
 } from '../chat/conversation.js';
-import { setStreaming, setSummarizing } from '../chat/composer.js';
+import { setStreaming, setSummarizing, applyDocZoom } from '../chat/composer.js';
 import { applyPanelState } from '../chat/panels.js';
 import { notice, showSummarizing, hideSummarizing, showTtsProgress, hideTtsProgress } from '../ui/notifications.js';
 
@@ -60,6 +60,7 @@ export function handleMessage(msg) {
       if (spellSelect) spellSelect.value = doc.spellLang || 'auto'; // per-chat spell-checker language
       applySpellLang();
       applyPanelState(doc); // restore the per-conversation Reasoning/Tools panel visibility
+      applyDocZoom(doc);    // restore the per-conversation chat zoom
       renderConfig();
       renderConversation();
       updateContextBar();

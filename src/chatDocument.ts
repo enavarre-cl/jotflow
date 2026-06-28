@@ -78,6 +78,11 @@ export interface ChatSummary {
 export interface ChatUi {
   thinkOpen?: boolean;
   toolsOpen?: boolean;
+  /** Ids of the expanded config-panel sections. Absent = the default (only the system prompt open);
+   *  an explicit `[]` means the user collapsed everything. */
+  configSections?: string[];
+  /** Per-conversation chat zoom (history scale). Absent = 1×. */
+  zoom?: number;
 }
 
 /** One markdown layer of the system prompt: a file referenced relative to the .chat, optionally muted.
@@ -256,10 +261,15 @@ export function parseDoc(text: string, defaults: ChatDefaults): ChatDoc {
 
   let ui: ChatUi | undefined;
   if (raw.ui && typeof raw.ui === 'object') {
-    const rui = raw.ui as { thinkOpen?: unknown; toolsOpen?: unknown };
+    const rui = raw.ui as { thinkOpen?: unknown; toolsOpen?: unknown; configSections?: unknown; zoom?: unknown };
     const u: ChatUi = {};
     if (typeof rui.thinkOpen === 'boolean') u.thinkOpen = rui.thinkOpen;
     if (typeof rui.toolsOpen === 'boolean') u.toolsOpen = rui.toolsOpen;
+    // Keep even an empty array: [] = "user collapsed everything", distinct from absent (= default).
+    if (Array.isArray(rui.configSections)) {
+      u.configSections = (rui.configSections as unknown[]).filter((s): s is string => typeof s === 'string');
+    }
+    if (typeof rui.zoom === 'number' && Number.isFinite(rui.zoom)) u.zoom = rui.zoom;
     if (Object.keys(u).length) ui = u;
   }
 

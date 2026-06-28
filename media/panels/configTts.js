@@ -10,12 +10,10 @@ import { fieldRow, renderConfig } from './config.js';
 
 const configFields = $('configFields');
 
-// Read aloud configuration section.
-export function renderTtsConfig() {
-  const h = document.createElement('div');
-  h.className = 'group-head';
-  h.textContent = t('Read aloud');
-  configFields.appendChild(h);
+// Read aloud configuration section. Rendered into `container` (the collapsible "Read aloud" section
+// body provided by config.js); falls back to the panel root for safety.
+export function renderTtsConfig(container) {
+  const parent = container || configFields;
 
   const engine = tts.prefs.engine || 'system';
 
@@ -28,14 +26,14 @@ export function renderTtsConfig() {
     eng.appendChild(o);
   });
   eng.addEventListener('change', () => { tts.prefs.engine = eng.value; tts.save(); tts.stop(); renderConfig(); });
-  configFields.appendChild(fieldRow(t('Engine'), eng));
+  parent.appendChild(fieldRow(t('Engine'), eng));
 
   if (engine === 'system') {
     if (!tts.voices.length) {
       const note = document.createElement('div');
       note.className = 'cfg-note';
       note.textContent = tts.triedVoices ? t("Couldn't load system voices.") : t('Loading system voices…');
-      configFields.appendChild(note);
+      parent.appendChild(note);
       if (tts.triedVoices) {
         const retry = document.createElement('button');
         retry.className = 'btn-secondary';
@@ -44,7 +42,7 @@ export function renderTtsConfig() {
         const row = document.createElement('div');
         row.className = 'sysref-actions';
         row.appendChild(retry);
-        configFields.appendChild(row);
+        parent.appendChild(row);
       }
       return;
     }
@@ -58,7 +56,7 @@ export function renderTtsConfig() {
       sel.appendChild(o);
     }
     sel.addEventListener('change', () => { tts.prefs.voiceURI = sel.value; tts.save(); });
-    configFields.appendChild(fieldRow(t('Voice'), sel));
+    parent.appendChild(fieldRow(t('Voice'), sel));
   } else if (engine === 'piper') {
     // Piper: the selector offers ONLY DOWNLOADED voices. The Custom option appears only if there
     // is a .onnx path configured in Settings (or if it is the current selection) — for a
@@ -83,7 +81,7 @@ export function renderTtsConfig() {
       sel.appendChild(o);
     }
     sel.addEventListener('change', () => { tts.prefs.piperVoice = sel.value; tts.save(); tts.stop(); renderConfig(); });
-    configFields.appendChild(fieldRow(t('Voice'), sel));
+    parent.appendChild(fieldRow(t('Voice'), sel));
 
     const note = document.createElement('div');
     note.className = 'cfg-note';
@@ -92,7 +90,7 @@ export function renderTtsConfig() {
       : !realVoices.length
         ? t('No voices downloaded. Add one from the Jotflow panel (Voices ➕).')
         : t('Downloaded voices work offline. Add more from the Jotflow panel (Voices ➕).');
-    configFields.appendChild(note);
+    parent.appendChild(note);
   } else {
     // Chatterbox: voices are cloned reference clips, created from the Voices panel (YouTube/file).
     const voices = tts.chatterboxVoices || [];
@@ -100,7 +98,7 @@ export function renderTtsConfig() {
       const note = document.createElement('div');
       note.className = 'cfg-note';
       note.textContent = t('No Chatterbox voices yet. Create one from the Jotflow panel (Voices ➕): paste a YouTube URL and a time range.');
-      configFields.appendChild(note);
+      parent.appendChild(note);
     } else {
       if (!voices.some((v) => v.id === tts.prefs.chatterboxVoice)) { tts.prefs.chatterboxVoice = voices[0].id; tts.save(); }
       const sel = document.createElement('select');
@@ -111,7 +109,7 @@ export function renderTtsConfig() {
         sel.appendChild(o);
       }
       sel.addEventListener('change', () => { tts.prefs.chatterboxVoice = sel.value; tts.save(); tts.stop(); });
-      configFields.appendChild(fieldRow(t('Voice'), sel));
+      parent.appendChild(fieldRow(t('Voice'), sel));
       // Expressiveness (Chatterbox exaggeration, 0–1).
       const exWrap = document.createElement('div');
       exWrap.className = 'tts-rate';
@@ -124,11 +122,11 @@ export function renderTtsConfig() {
       ex.addEventListener('input', () => { exVal.textContent = Number(ex.value).toFixed(2); });
       ex.addEventListener('change', () => { tts.prefs.exaggeration = Number(ex.value); tts.save(); });
       exWrap.appendChild(ex); exWrap.appendChild(exVal);
-      configFields.appendChild(fieldRow(t('Expressiveness'), exWrap));
+      parent.appendChild(fieldRow(t('Expressiveness'), exWrap));
       const note = document.createElement('div');
       note.className = 'cfg-note';
       note.textContent = t('Cloned voices run locally. Add more from the Jotflow panel (Voices ➕).');
-      configFields.appendChild(note);
+      parent.appendChild(note);
     }
   }
 
@@ -144,7 +142,7 @@ export function renderTtsConfig() {
   rate.addEventListener('input', () => { rateVal.textContent = Number(rate.value).toFixed(2) + '×'; });
   rate.addEventListener('change', () => { tts.prefs.rate = Number(rate.value); tts.save(); });
   rateWrap.appendChild(rate); rateWrap.appendChild(rateVal);
-  configFields.appendChild(fieldRow(t('Speed'), rateWrap));
+  parent.appendChild(fieldRow(t('Speed'), rateWrap));
 
   // Buttons: test and (Piper with curated voice only) update.
   const testRow = document.createElement('div');
@@ -165,5 +163,5 @@ export function renderTtsConfig() {
     });
     testRow.appendChild(upd);
   }
-  configFields.appendChild(testRow);
+  parent.appendChild(testRow);
 }

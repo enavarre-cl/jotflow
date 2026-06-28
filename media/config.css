@@ -1,0 +1,159 @@
+/**
+ * Config panel (side, ⚙): system prompt + .md layers, the collapsible section accordion,
+ * and the group headers. Split from style.css to keep each stylesheet under the 500-line ceiling.
+ */
+.sysref {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sysref-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.sysref button, .sysref-actions button {
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--vscode-panel-border);
+  background: transparent;
+  color: var(--vscode-foreground);
+}
+.sysref button:hover, .sysref-actions button:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+.sysref-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.sysref-actions button {
+  flex: 1;
+}
+/* equal width, distributed */
+
+/* System-prompt .md layers: an ordered list under the base prompt. */
+.syslayers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+.syslayer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+}
+.syslayer.disabled .syslayer-name {
+  opacity: .5;
+  text-decoration: line-through;
+}
+.syslayer-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.syslayer button {
+  font-size: 12px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--vscode-panel-border);
+  background: transparent;
+  color: var(--vscode-foreground);
+}
+.syslayer button:hover:not(:disabled) {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+.syslayer button:disabled {
+  opacity: .35;
+  cursor: default;
+}
+
+.group-head {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  opacity: .65;
+  margin-top: 6px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+/* Collapsible config sections (accordion). The header reuses the .group-head look as a button. */
+.cfg-section__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 4px 0 3px;
+  border: none;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  background: transparent;
+  color: var(--vscode-foreground);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  opacity: .75;
+}
+.cfg-section__head:hover {
+  opacity: 1;
+}
+/* Disclosure triangle drawn with borders (crisp at any DPI, themed via currentColor): points right
+ * when collapsed and rotates to point down when the section is open. */
+.cfg-section__chev {
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  margin: 0 3px;
+  border-style: solid;
+  border-width: 4px 0 4px 6px;
+  border-color: transparent transparent transparent currentColor;
+  opacity: .55;
+  transition: transform .12s ease;
+}
+.cfg-section:not(.collapsed) .cfg-section__chev {
+  transform: rotate(90deg);
+}
+.cfg-section__title {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.cfg-section__hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  opacity: .5;
+}
+/* The hint is a collapsed-state affordance only; hide it once the section is open. */
+.cfg-section:not(.collapsed) .cfg-section__hint {
+  display: none;
+}
+.cfg-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+}
+.cfg-section.collapsed .cfg-section__body {
+  display: none;
+}

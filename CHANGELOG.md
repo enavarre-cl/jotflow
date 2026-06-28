@@ -5,6 +5,44 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-06-28
+
+### Added
+- **The ⚙ settings are now collapsible sections, collapsed by default.** The long flat list of
+  parameters is reorganised into intent-based, foldable groups — **System prompt** (open by default),
+  **Response** (temperature · length · stop), **Context** (history · summarize), **Capabilities**
+  (reasoning · tools), **Sampling** (the advanced samplers), **Engine · Ollama** (num_ctx · threads)
+  and **Read aloud**. Each header shows a one-line hint of its contents while collapsed and a
+  disclosure triangle that rotates open. The open/closed set is **persisted per conversation** in the
+  `.chat` (`ui.configSections`; absent = the default of only the system prompt open, an explicit `[]`
+  = everything collapsed). A section whose parameters don't apply to the active backend is hidden.
+- **Chat zoom is remembered per conversation.** The `Alt`/`Option`+wheel (and the −/%/+ toolbar) zoom
+  level now travels with the `.chat` (`ui.zoom`), so reopening a conversation restores its zoom
+  instead of resetting to 100%. Persisted debounced through the same `setConfig` path as the panel
+  state; `vscode.getState()` is kept as a fast local cache so the level is also restored instantly on
+  a plain webview reload.
+
+### Changed
+- **The Settings panel header uses an SVG cog icon** (matching the Reasoning/Tools panels) instead of
+  the thin, undersized `⚙` emoji, so all three panel headers share one icon size and weight.
+- **The "Stop Strings" control now uses the standard `.cfg-row` (label-over-control) layout** like
+  Engine/Voice, instead of a one-off `.param-head` structure — so its label↔control spacing and label
+  style match the rest of the panel.
+
+### Internal
+- **CSS split to stay under the 500-line ceiling (M1):** the config-panel styles (system prompt,
+  `.md` layers, the section accordion, group headers) moved out of `style.css` (503 → 354) into a new
+  `media/config.css` (159), linked right after `style.css`.
+- **Dead-code/safety:** the stop-strings editor dropped its `innerHTML` + `escapeHtml` label in favour
+  of `textContent` (one fewer XSS-adjacent sink, U4/U12), and the now-unused `escapeHtml` import was
+  removed from `config.js`.
+
+### Tests
+- `applyPatch.test.ts` gains coverage for the new `ui` fields: `configSections` (string-array
+  validation, empty-array preserved as "all collapsed", non-string ids filtered) and `zoom`
+  (finite-number validation), plus a `parseDoc`/`serializeDoc` round-trip. Suite: **103 tests, all
+  passing**.
+
 ## [2.4.0] - 2026-06-28
 
 ### Added

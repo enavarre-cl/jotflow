@@ -46,8 +46,12 @@ management and neural text‑to‑speech without leaving the editor.
   model via MLX; other platforms use PyTorch.
 - 🎛️ **Engines panel**: install / start / stop / delete each local engine (Ollama · Piper ·
   Chatterbox) from one view, with download sources, a live progress bar and the RAM each engine uses.
-- 🔎 **Find & replace in chat** (`Ctrl/Cmd+F` find · `Ctrl/Cmd+H` replace), 🔍 **zoom** (`Alt`/`Option` + wheel), 🌳 **fork**,
-  🕓 **compare versions**, ♻️ **regenerate / continue / merge / edit / delete** messages.
+- 🔎 **Find & replace in chat** (`Ctrl/Cmd+F` find · `Ctrl/Cmd+H` replace), 🔍 **zoom** (`Alt`/`Option` + wheel,
+  **remembered per conversation**), 🌳 **fork**, 🕓 **compare versions**,
+  ♻️ **regenerate / continue / merge / edit / delete** messages.
+- 🎚️ **Collapsible settings (⚙)** — the per‑conversation parameters are grouped into foldable
+  sections (Response · Context · Capabilities · Sampling · Engine · Read aloud), **collapsed by
+  default** with the system prompt open; the open/closed state is **remembered per conversation**.
 - 🖼️ **Attachments** (images & documents) and **image generation** — image‑output models like
   Gemini *flash‑image* ("nano‑banana") render their images inline (copy / save to disk).
 - 📎 **`@file` mentions** in the composer **and when editing a message**: type `@`, pick a workspace
@@ -112,8 +116,8 @@ git‑versionable. The system prompt is an **open inline base plus any number of
 (`systemPromptFiles`): at send time the base and every enabled layer are concatenated in order to
 build the prompt — so you can keep a shared persona/rules in reusable files, reorder them, and toggle
 one off without deleting it. Each layer is confined to the workspace (the `.chat`'s folder or any
-workspace root). View preferences travel with it too — e.g. whether the **Reasoning / Tools** panels
-are open (`ui`).
+workspace root). View preferences travel with it too (`ui`) — whether the **Reasoning / Tools**
+panels are open, which **⚙ settings sections** you left expanded, and the chat **zoom** level.
 
 ## Tools (function calling)
 
@@ -196,7 +200,9 @@ Jotflow is **MIT** licensed. It bundles or downloads third‑party components un
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for the release history. **2.4.0** makes the system prompt a
+See [CHANGELOG.md](CHANGELOG.md) for the release history. **2.5.0** reorganises the ⚙ settings into
+**collapsible sections** (collapsed by default, state remembered per conversation) and **remembers the
+chat zoom** per `.chat`. **2.4.0** makes the system prompt a
 **layered** one — an open inline base plus multiple ordered `.md` files you can add, reorder and
 toggle (concatenated, in order, at send time); the legacy single `systemPromptFile` is migrated into
 one layer automatically. **2.3.5** stops a chat whose `.attach`

@@ -91,6 +91,23 @@ test('applyPatch updates ui panel visibility and validates booleans', () => {
   assert.equal(doc.ui?.thinkOpen, true); // unchanged
 });
 
+test('applyPatch updates ui.configSections and ui.zoom (validated, merged)', () => {
+  const doc = makeDoc();
+  applyPatch(doc, { ui: { configSections: ['sysprompt', 'sampling'], zoom: 1.4 } });
+  assert.deepEqual(doc.ui?.configSections, ['sysprompt', 'sampling']);
+  assert.equal(doc.ui?.zoom, 1.4);
+
+  // An empty array is a valid "everything collapsed" state (kept, not dropped).
+  applyPatch(doc, { ui: { configSections: [] } });
+  assert.deepEqual(doc.ui?.configSections, []);
+  assert.equal(doc.ui?.zoom, 1.4); // untouched by the partial patch
+
+  // Junk is rejected at the boundary: non-array sections and non-finite zoom.
+  applyPatch(doc, { ui: { configSections: 'nope' as unknown as string[], zoom: NaN } });
+  assert.deepEqual(doc.ui?.configSections, []); // unchanged
+  assert.equal(doc.ui?.zoom, 1.4);              // unchanged
+});
+
 test('parseDoc/serializeDoc round-trips ui and omits it when absent', () => {
   const defaults = { provider: 'ollama' as const, temperature: 0.7, maxTokens: 2048 };
 
@@ -116,6 +133,21 @@ test('parseDoc/serializeDoc round-trips ui and omits it when absent', () => {
     ui: { thinkOpen: 'x', toolsOpen: true }, params: { temperature: 0.7 }, messages: [],
   }), defaults);
   assert.deepEqual(partial.ui, { toolsOpen: true });
+
+  // configSections (incl. empty) + zoom survive the round-trip; non-string section ids are filtered.
+  const withState = parseDoc(JSON.stringify({
+    version: 2, provider: 'ollama', model: 'm', systemPrompt: '',
+    ui: { configSections: ['sysprompt', 2, 'sampling'], zoom: 1.25 }, params: { temperature: 0.7 }, messages: [],
+  }), defaults);
+  assert.deepEqual(withState.ui, { configSections: ['sysprompt', 'sampling'], zoom: 1.25 });
+  assert.deepEqual(parseDoc(serializeDoc(withState), defaults).ui, { configSections: ['sysprompt', 'sampling'], zoom: 1.25 });
+
+  // An explicit empty configSections ("all collapsed") is preserved, distinct from absent.
+  const collapsed = parseDoc(JSON.stringify({
+    version: 2, provider: 'ollama', model: 'm', systemPrompt: '',
+    ui: { configSections: [] }, params: { temperature: 0.7 }, messages: [],
+  }), defaults);
+  assert.deepEqual(collapsed.ui, { configSections: [] });
 });
 
 const DEFAULTS = { provider: 'ollama' as const, temperature: 0.7, maxTokens: 2048 };
