@@ -55,6 +55,9 @@ management and neural text‑to‑speech without leaving the editor.
 - 🧾 **Export** to standalone HTML / PDF.
 - 🧮 **Context management**: auto‑summarize when context fills up, or send only the last *N*
   messages — both shown visually in the chat.
+- 🧱 **Layered system prompt**: an open inline base plus **multiple ordered `.md` files** (⚙ panel) —
+  add several at once, **reorder** them, and **toggle** any layer on/off; at inference time the base
+  and every enabled layer are concatenated, in order, into the prompt that is sent.
 - 🌍 **6 languages** (UI, spell‑check and TTS): English, Spanish, Portuguese, French, German,
   Italian — switchable live, with a personal spell‑check dictionary per language.
 
@@ -105,9 +108,12 @@ Jotflow can manage its **own Ollama server** without you installing anything:
 
 Each conversation is a **`.chat`** file (human‑readable JSON) storing the **inference config + full
 history**. Opening it shows the chat UI; everything is persisted in the file, so it is
-git‑versionable. A `.chat` may reference its system prompt from an external **`.md`** file
-(`systemPromptFile`, confined to the `.chat`'s directory). View preferences travel with it too —
-e.g. whether the **Reasoning / Tools** panels are open (`ui`).
+git‑versionable. The system prompt is an **open inline base plus any number of ordered `.md` layers**
+(`systemPromptFiles`): at send time the base and every enabled layer are concatenated in order to
+build the prompt — so you can keep a shared persona/rules in reusable files, reorder them, and toggle
+one off without deleting it. Each layer is confined to the workspace (the `.chat`'s folder or any
+workspace root). View preferences travel with it too — e.g. whether the **Reasoning / Tools** panels
+are open (`ui`).
 
 ## Tools (function calling)
 
@@ -190,7 +196,10 @@ Jotflow is **MIT** licensed. It bundles or downloads third‑party components un
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for the release history. **2.3.5** stops a chat whose `.attach`
+See [CHANGELOG.md](CHANGELOG.md) for the release history. **2.4.0** makes the system prompt a
+**layered** one — an open inline base plus multiple ordered `.md` files you can add, reorder and
+toggle (concatenated, in order, at send time); the legacy single `systemPromptFile` is migrated into
+one layer automatically. **2.3.5** stops a chat whose `.attach`
 sidecar was deleted from failing every turn with a provider `400`/`502`. **2.3.4** fixes a scroll jump
 when deleting a message that has an image. **2.3.3** makes the **Reasoning / Tools** panels remember their
 open/closed state **per conversation** (so they stop popping back open while streaming), fixes the

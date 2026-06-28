@@ -13,34 +13,40 @@ export function makeSystemPrompt(document: vscode.TextDocument) {
     const sysPromptPathAllowed = (resolved: string): boolean =>
       sysPromptRoots().some((root) => resolved === root || resolved.startsWith(root + path.sep));
 
-    let sysPromptWarned = ''; // debounce: warn once per broken file, not on every send
+    let sysPromptWarned = ''; // debounce: warn once per failing-file set, not on every send
 
-    // Reads the EFFECTIVE system prompt (file if usable, else inline). No side effects.
-    // `fileFailed` = a systemPromptFile was set but is missing/empty/outside the workspace.
-    const readSystemPrompt = (doc: ChatDoc): { text: string; fileFailed: boolean } => {
-      if (doc.systemPromptFile) {
-        const resolved = path.resolve(path.dirname(document.uri.fsPath), doc.systemPromptFile);
-        if (sysPromptPathAllowed(resolved)) {
-          try {
-            const text = fs.readFileSync(resolved, 'utf8');
-            if (text.trim()) return { text, fileFailed: false };
-          } catch { /* missing/unreadable */ }
-        }
-        return { text: doc.systemPrompt || '', fileFailed: true };
+    // Assembles the EFFECTIVE system prompt: the inline base (if any) followed by every enabled .md
+    // layer, in order, joined by a blank line. No side effects. `failures` lists the layers that
+    // couldn't be read (missing, empty, or outside the workspace) so the caller can warn.
+    const readSystemPrompt = (doc: ChatDoc): { text: string; failures: string[] } => {
+      const dir = path.dirname(document.uri.fsPath);
+      const segments: string[] = [];
+      const failures: string[] = [];
+      const base = doc.systemPrompt || '';
+      if (base.trim()) segments.push(base);
+      for (const part of doc.systemPromptFiles ?? []) {
+        if (!part || typeof part.path !== 'string' || part.enabled === false) continue;
+        const resolved = path.resolve(dir, part.path);
+        if (!sysPromptPathAllowed(resolved)) { failures.push(part.path); continue; }
+        try {
+          const text = fs.readFileSync(resolved, 'utf8');
+          if (text.trim()) segments.push(text);
+          else failures.push(part.path);
+        } catch { failures.push(part.path); }
       }
-      return { text: doc.systemPrompt || '', fileFailed: false };
+      return { text: segments.join('\n\n'), failures };
     };
 
-    // Effective system prompt for sending; warns once (visibly) if a referenced file couldn't be
-    // used, instead of silently using the inline prompt (which looks like the prompt is ignored).
+    // Effective system prompt for sending; warns once (visibly) if any referenced layer couldn't be
+    // used, instead of silently dropping it (which looks like the prompt is being ignored).
     const resolveSystemPrompt = (doc: ChatDoc): string => {
-      const { text, fileFailed } = readSystemPrompt(doc);
-      if (fileFailed) {
-        const file = doc.systemPromptFile || '';
-        if (sysPromptWarned !== file) {
-          sysPromptWarned = file;
+      const { text, failures } = readSystemPrompt(doc);
+      const key = failures.join('\n');
+      if (failures.length) {
+        if (sysPromptWarned !== key) {
+          sysPromptWarned = key;
           void vscode.window.showWarningMessage(
-            `${tr('System prompt file not used (missing, empty, or outside the workspace); using the inline prompt instead:')} ${file}`
+            `${tr('Some system-prompt files were skipped (missing, empty, or outside the workspace):')} ${failures.join(', ')}`
           );
         }
       } else {

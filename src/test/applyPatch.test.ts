@@ -117,3 +117,59 @@ test('parseDoc/serializeDoc round-trips ui and omits it when absent', () => {
   }), defaults);
   assert.deepEqual(partial.ui, { toolsOpen: true });
 });
+
+const DEFAULTS = { provider: 'ollama' as const, temperature: 0.7, maxTokens: 2048 };
+
+test('parseDoc migrates a legacy systemPromptFile into one layer and empties the base', () => {
+  // The legacy single file REPLACED the inline prompt, so migration must empty the base (the file
+  // already holds that text) — preserving the exact prompt sent, not doubling it.
+  const doc = parseDoc(JSON.stringify({
+    version: 2, provider: 'ollama', model: 'm', systemPrompt: 'old inline',
+    systemPromptFile: 'sys.md', params: { temperature: 0.7 }, messages: [],
+  }), DEFAULTS);
+  assert.equal(doc.systemPrompt, '');
+  assert.deepEqual(doc.systemPromptFiles, [{ path: 'sys.md' }]);
+  // The legacy key must not survive into _extra and get re-emitted alongside the new array.
+  const out = serializeDoc(doc);
+  assert.ok(!/"systemPromptFile":/.test(out));
+  assert.ok(/"systemPromptFiles":/.test(out));
+});
+
+test('parseDoc validates systemPromptFiles (objects + string shorthand, drops junk, keeps enabled:false)', () => {
+  const doc = parseDoc(JSON.stringify({
+    version: 2, provider: 'ollama', model: 'm', systemPrompt: 'base',
+    systemPromptFiles: [
+      { path: 'a.md' },
+      'b.md',                       // shorthand → { path }
+      { path: 'c.md', enabled: false },
+      { path: '  ' },               // blank path → dropped
+      { enabled: true },            // no path → dropped
+      42,                           // junk → dropped
+    ],
+    params: { temperature: 0.7 }, messages: [],
+  }), DEFAULTS);
+  assert.deepEqual(doc.systemPromptFiles, [
+    { path: 'a.md' },
+    { path: 'b.md' },
+    { path: 'c.md', enabled: false },
+  ]);
+  // A present array wins over a legacy field; base is left untouched (not emptied).
+  assert.equal(doc.systemPrompt, 'base');
+});
+
+test('serializeDoc round-trips systemPromptFiles and omits the key when there are no layers', () => {
+  const withLayers = parseDoc(JSON.stringify({
+    version: 2, provider: 'ollama', model: 'm', systemPrompt: 'base',
+    systemPromptFiles: [{ path: 'a.md' }, { path: 'b.md', enabled: false }],
+    params: { temperature: 0.7 }, messages: [],
+  }), DEFAULTS);
+  const reparsed = parseDoc(serializeDoc(withLayers), DEFAULTS);
+  assert.deepEqual(reparsed.systemPromptFiles, [{ path: 'a.md' }, { path: 'b.md', enabled: false }]);
+
+  const noLayers = parseDoc(JSON.stringify({
+    version: 2, provider: 'ollama', model: 'm', systemPrompt: 'base',
+    params: { temperature: 0.7 }, messages: [],
+  }), DEFAULTS);
+  assert.equal(noLayers.systemPromptFiles, undefined);
+  assert.ok(!/"systemPromptFiles":/.test(serializeDoc(noLayers)));
+});

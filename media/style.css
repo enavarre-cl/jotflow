@@ -260,6 +260,50 @@ body {
 }
 /* equal width, distributed */
 
+/* System-prompt .md layers: an ordered list under the base prompt. */
+.syslayers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+.syslayer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+}
+.syslayer.disabled .syslayer-name {
+  opacity: .5;
+  text-decoration: line-through;
+}
+.syslayer-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.syslayer button {
+  font-size: 12px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--vscode-panel-border);
+  background: transparent;
+  color: var(--vscode-foreground);
+}
+.syslayer button:hover:not(:disabled) {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+.syslayer button:disabled {
+  opacity: .35;
+  cursor: default;
+}
+
 .group-head {
   font-size: 11px;
   font-weight: 600;

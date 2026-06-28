@@ -238,7 +238,7 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
     // This way the first fragment plays immediately and no giant WAVs are generated for long messages.
     // `voice` is a curated voice id (downloaded automatically); if empty, uses the path from settings.
 
-    // Roots a systemPromptFile may live in: the .chat's own folder + any workspace folder. Project
+    // Roots a system-prompt layer may live in: the .chat's own folder + any workspace folder. Project
     // files are fine; a shared .chat still cannot pull arbitrary files (e.g. ../../etc/passwd) into
     // the prompt and exfiltrate them to the model.
     const { resolveSystemPrompt, readSystemPrompt, sysPromptPathAllowed } = makeSystemPrompt(document);
@@ -247,8 +247,8 @@ class ChatEditorProvider implements vscode.CustomTextEditorProvider {
     const attachStore = new AttachmentStore(document.uri);
 
     // Copy of the doc with resolved attachments (for the webview), without touching the persisted doc.
-    // `sysPromptTokens` = tokens of the EFFECTIVE system prompt (file content included): the webview
-    // only has the inline `systemPrompt`, so without this its context bar undercounts when a file is used.
+    // `sysPromptTokens` = tokens of the EFFECTIVE system prompt (base + all enabled layer contents):
+    // the webview only has the layer paths, so without this its context bar undercounts when layers are used.
     const resolveDocForView = (doc: ChatDoc): ChatDoc & { sysPromptTokens: number } => ({
       ...doc,
       sysPromptTokens: estTokens(readSystemPrompt(doc).text),

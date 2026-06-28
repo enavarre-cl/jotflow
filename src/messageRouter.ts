@@ -24,6 +24,8 @@ export interface WebviewMessage {
   word?: string;
   lang?: string;
   index?: number;
+  to?: number;           // target index for moveSysPrompt (reorder)
+  enabled?: boolean;     // on/off flag for toggleSysPrompt
   text?: string;
   attachments?: Attachment[];
   rate?: number;
@@ -328,7 +330,9 @@ export async function routeMessage(msg: WebviewMessage, ctx: RouterCtx): Promise
         case 'createSysPrompt':
         case 'pickSysPrompt':
         case 'openSysPrompt':
-        case 'clearSysPrompt':
+        case 'removeSysPrompt':
+        case 'moveSysPrompt':
+        case 'toggleSysPrompt':
           await routeSysPrompt(msg, ctx); // handlers split into messageRouterSysPrompt.ts
           break;
       }

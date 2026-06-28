@@ -66,45 +66,8 @@ const SLIDER_STEP = 0.01; // decimal precision for fractional sliders/number inp
     // Backend and model are static in the HTML; here only system prompt + parameters.
     configFields.innerHTML = '';
 
-    // System prompt: reference to a .md file, or inline.
-    if (doc.systemPromptFile) {
-      const ref = document.createElement('div');
-      ref.className = 'sysref';
-      const name = document.createElement('span');
-      name.className = 'sysref-name';
-      name.textContent = '📄 ' + doc.systemPromptFile;
-      const open = document.createElement('button');
-      open.textContent = t('Open'); open.title = t('Open the .md file');
-      open.addEventListener('click', () => vscode.postMessage({ type: 'openSysPrompt' }));
-      const clear = document.createElement('button');
-      clear.textContent = t('Remove'); clear.title = t('Back to inline system prompt');
-      clear.addEventListener('click', () => vscode.postMessage({ type: 'clearSysPrompt' }));
-      ref.appendChild(name); ref.appendChild(open); ref.appendChild(clear);
-      configFields.appendChild(fieldRow(t('System prompt (file)'), ref));
-    } else {
-      const sys = document.createElement('textarea');
-      sys.className = 'sys-area';
-      sys.spellcheck = true; sys.lang = window.LangI18n.get();
-      sys.rows = 2; sys.value = doc.systemPrompt; sys.placeholder = t('System instructions…');
-      const sysAutosize = () => { sys.style.height = 'auto'; sys.style.height = Math.min(sys.scrollHeight, 320) + 'px'; };
-      sys.addEventListener('input', sysAutosize);
-      sys.addEventListener('change', () => patchConfig({ systemPrompt: sys.value }));
-      requestAnimationFrame(sysAutosize);
-      const actions = document.createElement('div');
-      actions.className = 'sysref-actions';
-      const create = document.createElement('button');
-      create.textContent = t('Save');
-      create.title = t('Save the prompt to a .md file and reference it');
-      create.addEventListener('click', () => vscode.postMessage({ type: 'createSysPrompt' }));
-      const pick = document.createElement('button');
-      pick.textContent = t('Load');
-      pick.title = t('Use an existing .md file');
-      pick.addEventListener('click', () => vscode.postMessage({ type: 'pickSysPrompt' }));
-      actions.appendChild(create); actions.appendChild(pick);
-      const wrap = document.createElement('div');
-      wrap.appendChild(sys); wrap.appendChild(actions);
-      configFields.appendChild(fieldRow('System prompt', wrap));
-    }
+    // System prompt: an always-editable inline base + ordered .md layers, concatenated at send time.
+    configFields.appendChild(fieldRow('System prompt', sysPromptControl(doc)));
 
     // Parameter groups, filtered by the active backend (hides empty groups).
     const provider = doc.provider;
@@ -130,6 +93,79 @@ const SLIDER_STEP = 0.01; // decimal precision for fractional sliders/number inp
     row.appendChild(l);
     row.appendChild(control);
     return row;
+  }
+
+  // System-prompt control: the inline base (always editable, segment 0) followed by the ordered list
+  // of .md layers. Layer ops post a message and re-render off the host's pushDoc; only the base text
+  // uses the optimistic patchConfig path.
+  function sysPromptControl(doc) {
+    const wrap = document.createElement('div');
+
+    const sys = document.createElement('textarea');
+    sys.className = 'sys-area';
+    sys.spellcheck = true; sys.lang = window.LangI18n.get();
+    sys.rows = 2; sys.value = doc.systemPrompt; sys.placeholder = t('System instructions…');
+    const sysAutosize = () => { sys.style.height = 'auto'; sys.style.height = Math.min(sys.scrollHeight, 320) + 'px'; };
+    sys.addEventListener('input', sysAutosize);
+    sys.addEventListener('change', () => patchConfig({ systemPrompt: sys.value }));
+    requestAnimationFrame(sysAutosize);
+    wrap.appendChild(sys);
+
+    const layers = Array.isArray(doc.systemPromptFiles) ? doc.systemPromptFiles : [];
+    if (layers.length) {
+      const list = document.createElement('div');
+      list.className = 'syslayers';
+      layers.forEach((layer, i) => list.appendChild(sysLayerRow(layer, i, layers.length)));
+      wrap.appendChild(list);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'sysref-actions';
+    const add = document.createElement('button');
+    add.textContent = t('Add .md');
+    add.title = t('Append one or more existing .md files as layers');
+    add.addEventListener('click', () => vscode.postMessage({ type: 'pickSysPrompt' }));
+    const save = document.createElement('button');
+    save.textContent = t('Save base as .md');
+    save.title = t('Write the base prompt to a new .md file and append it as a layer');
+    save.addEventListener('click', () => vscode.postMessage({ type: 'createSysPrompt' }));
+    actions.appendChild(add); actions.appendChild(save);
+    wrap.appendChild(actions);
+    return wrap;
+  }
+
+  // One .md layer row: [☑ enabled] 📄 name … [↑] [↓] [Open] [✕]
+  function sysLayerRow(layer, i, count) {
+    const enabled = layer.enabled !== false;
+    const row = document.createElement('div');
+    row.className = 'syslayer' + (enabled ? '' : ' disabled');
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = enabled;
+    cb.title = t('Include this layer in the prompt');
+    cb.addEventListener('change', () => vscode.postMessage({ type: 'toggleSysPrompt', index: i, enabled: cb.checked }));
+
+    const name = document.createElement('span');
+    name.className = 'syslayer-name';
+    name.textContent = '📄 ' + layer.path;
+    name.title = layer.path;
+
+    const up = sysLayerBtn('↑', t('Move up'), i > 0, () => vscode.postMessage({ type: 'moveSysPrompt', index: i, to: i - 1 }));
+    const down = sysLayerBtn('↓', t('Move down'), i < count - 1, () => vscode.postMessage({ type: 'moveSysPrompt', index: i, to: i + 1 }));
+    const open = sysLayerBtn(t('Open'), t('Open the .md file'), true, () => vscode.postMessage({ type: 'openSysPrompt', index: i }));
+    const rm = sysLayerBtn('✕', t('Remove layer'), true, () => vscode.postMessage({ type: 'removeSysPrompt', index: i }));
+
+    row.appendChild(cb); row.appendChild(name);
+    row.appendChild(up); row.appendChild(down); row.appendChild(open); row.appendChild(rm);
+    return row;
+  }
+
+  function sysLayerBtn(label, title, enabled, onClick) {
+    const b = document.createElement('button');
+    b.textContent = label; b.title = title;
+    b.disabled = !enabled;
+    if (enabled) b.addEventListener('click', onClick);
+    return b;
   }
 
   // Dispatches to a per-kind builder; every branch produces the same `cfg-row param` element.

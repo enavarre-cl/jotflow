@@ -5,6 +5,40 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-06-28
+
+### Added
+- **The system prompt is now layered: an open inline base + any number of ordered `.md` files.**
+  The ⚙ panel keeps the always-editable base prompt and, below it, a reorderable list of `.md`
+  **layers**: **Add .md** appends one or more existing files (multi-select), **Save base as .md**
+  externalises the current base into a new file and appends it, and each layer row has a **checkbox**
+  (include/exclude without deleting), **↑ / ↓** to reorder, **Open** and **✕**. At inference time the
+  base and every *enabled* layer are read and **concatenated in order** (`\n\n`-joined) into the
+  single system prompt that is sent — so a shared persona/rules can live in reusable files, be
+  reordered, and be toggled per chat. Stored as `systemPromptFiles: [{ path, enabled? }]` (a layer's
+  `enabled` is persisted only when `false`, keeping the JSON clean).
+- **Per-layer assembly is reflected in the context bar** — `sysPromptTokens` now counts the base
+  plus all enabled layer contents, so the token budget doesn't undercount when layers are used.
+
+### Changed
+- **Migration: the legacy single `systemPromptFile` is converted into one layer on load.** Because
+  that field *replaced* the inline prompt, migration moves it into `systemPromptFiles` and **empties
+  the base** — preserving the exact prompt that was being sent (no doubling). The legacy key is no
+  longer written.
+
+### Security
+- **Path confinement is enforced per layer.** Each `systemPromptFiles` entry is validated against the
+  workspace allow-list (the `.chat`'s folder or any workspace root) both when assembling the prompt
+  for the model (`readSystemPrompt`) and when opening a layer (`openSysPrompt`); out-of-workspace
+  layers are warned about at pick time and skipped at send time. SECURITY.md's path-traversal row
+  updated accordingly.
+
+### Tests
+- `applyPatch.test.ts` gains 3 cases: legacy `systemPromptFile` → single layer + emptied base (and
+  the old key not re-emitted), `systemPromptFiles` validation (object + string shorthand, junk
+  dropped, `enabled:false` kept), and a serialize round-trip (absent → no key). Suite: **102 tests,
+  all passing**.
+
 ## [2.3.5] - 2026-06-27
 
 ### Fixed

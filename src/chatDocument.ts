@@ -15,7 +15,7 @@ interface RawMessage {
 interface RawSummary { text?: unknown; upTo?: unknown }
 interface RawDoc {
   params?: unknown; summary?: RawSummary; usage?: RawUsage; title?: unknown; provider?: unknown; model?: unknown;
-  systemPrompt?: unknown; systemPromptFile?: unknown; spellLang?: unknown; messages?: unknown;
+  systemPrompt?: unknown; systemPromptFile?: unknown; systemPromptFiles?: unknown; spellLang?: unknown; messages?: unknown;
   [k: string]: unknown; // v1 loose params live at the top level; _extra round-trips unknown keys
 }
 /** A bag of inference settings read either from `raw.params` (v2) or the top level (v1). */
@@ -80,13 +80,22 @@ export interface ChatUi {
   toolsOpen?: boolean;
 }
 
+/** One markdown layer of the system prompt: a file referenced relative to the .chat, optionally muted.
+ *  `enabled === false` keeps the reference but excludes it from the assembled prompt; absent = on. */
+export interface SysPromptFile {
+  path: string;
+  enabled?: boolean;
+}
+
 export interface ChatDoc {
   version: number;
   title: string;
   provider: ProviderId;
   model: string;
-  systemPrompt: string;
-  systemPromptFile?: string; // path to a .md (relative to the .chat); takes precedence if present
+  systemPrompt: string; // the open base prompt — always the first segment of the assembled prompt
+  /** Ordered markdown layers appended after the base at send time (concatenated, in order). The
+   *  legacy single `systemPromptFile` string is migrated into this on load. */
+  systemPromptFiles?: SysPromptFile[];
   spellLang?: 'auto' | 'off' | 'es' | 'en'; // spell-checker language (per-chat). Absent/'auto' = system default
   ui?: ChatUi; // per-conversation panel visibility (Reasoning/Tools); persisted in the .chat
   params: ChatParams;
@@ -144,6 +153,27 @@ export function defaultDoc(defaults: ChatDefaults): ChatDoc {
 // (a "maybe-number" has no narrower shape); each one narrows before use.
 function num(v: unknown, fallback: number): number {
   return typeof v === 'number' && !Number.isNaN(v) ? v : fallback;
+}
+
+/** Validates the `systemPromptFiles` array from a loaded .chat. Tolerates bare strings (hand-edited
+ *  shorthand) and `{ path, enabled }` objects; drops anything without a usable path. `enabled` is only
+ *  carried when explicitly false (default-on stays absent, keeping the serialized JSON clean). */
+function parseSysPromptFiles(raw: unknown): SysPromptFile[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as unknown[])
+    .map((it): SysPromptFile | null => {
+      if (typeof it === 'string') return it.trim() ? { path: it } : null;
+      if (it && typeof it === 'object') {
+        const o = it as { path?: unknown; enabled?: unknown };
+        if (typeof o.path === 'string' && o.path.trim()) {
+          const part: SysPromptFile = { path: o.path };
+          if (o.enabled === false) part.enabled = false;
+          return part;
+        }
+      }
+      return null;
+    })
+    .filter((p): p is SysPromptFile => !!p);
 }
 
 /** Normalises a Toggle read from JSON, tolerating old/partial formats. */
@@ -233,13 +263,23 @@ export function parseDoc(text: string, defaults: ChatDefaults): ChatDoc {
     if (Object.keys(u).length) ui = u;
   }
 
+  // System-prompt layers. Prefer the new `systemPromptFiles` array; otherwise migrate a legacy single
+  // `systemPromptFile`. The legacy field REPLACED the inline prompt, so on migration we empty the base
+  // (the file already holds that text) — preserving the exact prompt that was being sent, not doubling it.
+  let systemPrompt = typeof raw.systemPrompt === 'string' ? raw.systemPrompt : base.systemPrompt;
+  let systemPromptFiles = parseSysPromptFiles(raw.systemPromptFiles);
+  if (!systemPromptFiles.length && typeof raw.systemPromptFile === 'string' && raw.systemPromptFile.trim()) {
+    systemPromptFiles = [{ path: raw.systemPromptFile }];
+    systemPrompt = '';
+  }
+
   const doc: ChatDoc = {
     version: 2,
     title: typeof raw.title === 'string' ? raw.title : base.title,
     provider: validateProvider(raw.provider),
     model: typeof raw.model === 'string' ? raw.model : '',
-    systemPrompt: typeof raw.systemPrompt === 'string' ? raw.systemPrompt : base.systemPrompt,
-    systemPromptFile: typeof raw.systemPromptFile === 'string' && raw.systemPromptFile ? raw.systemPromptFile : undefined,
+    systemPrompt,
+    systemPromptFiles: systemPromptFiles.length ? systemPromptFiles : undefined,
     spellLang: typeof raw.spellLang === 'string' && ['auto', 'off', 'es', 'en'].includes(raw.spellLang)
       ? raw.spellLang as ChatDoc['spellLang'] : undefined,
     ui,
@@ -322,7 +362,9 @@ export function parseDoc(text: string, defaults: ChatDefaults): ChatDoc {
 
 /** Top-level keys owned by the schema; anything else in a .chat is preserved via doc._extra. */
 const KNOWN_TOP_KEYS = new Set([
-  'version', 'title', 'provider', 'model', 'systemPrompt', 'systemPromptFile',
+  // 'systemPromptFile' (legacy, singular) is listed so a migrated doc's old key is consumed, not
+  // round-tripped into _extra alongside the new 'systemPromptFiles'.
+  'version', 'title', 'provider', 'model', 'systemPrompt', 'systemPromptFile', 'systemPromptFiles',
   'spellLang', 'ui', 'params', 'summary', 'usage', 'messages',
 ]);
 
@@ -333,7 +375,7 @@ export function serializeDoc(doc: ChatDoc): string {
     provider: doc.provider,
     model: doc.model,
     systemPrompt: doc.systemPrompt,
-    systemPromptFile: doc.systemPromptFile,
+    systemPromptFiles: doc.systemPromptFiles,
     spellLang: doc.spellLang,
     ui: doc.ui,
     params: {
