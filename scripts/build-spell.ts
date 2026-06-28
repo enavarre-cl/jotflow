@@ -1,12 +1,17 @@
-// Regenerates the webview spell-check assets from the npm `dictionary-*` dev deps:
-//   - media/dict/<lang>.{aff,dic,LICENSE}  (hunspell dictionaries + their licenses)
-//   - media/spell-engine.js                (the nspell engine bundled for the browser sandbox)
-// Run with `npm run build:spell`. Idempotent.
-const fs = require('fs');
-const path = require('path');
-const esbuild = require('esbuild');
+/**
+ * Regenerates the webview spell-check assets from the npm `dictionary-*` dev deps (run via tsx):
+ *   - media/dict/<lang>.{aff,dic,LICENSE}  (hunspell dictionaries + their licenses)
+ *   - media/spell-engine.js                (the nspell engine bundled for the browser sandbox)
+ * Run with `npm run build:spell`. Idempotent.
+ */
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { createRequire } from 'node:module';
+import * as esbuild from 'esbuild';
 
-const LANGS = [
+const require = createRequire(import.meta.url); // for require.resolve() of the dictionary packages
+
+const LANGS: [string, string][] = [
   ['es', 'dictionary-es'],
   ['en', 'dictionary-en'],
   ['pt', 'dictionary-pt'],

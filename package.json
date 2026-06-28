@@ -2,7 +2,7 @@
   "name": "jotflow",
   "displayName": "Jotflow",
   "description": "%ext.description%",
-  "version": "2.6.5",
+  "version": "2.6.6",
   "publisher": "enavarre",
   "license": "MIT",
   "engines": {
@@ -671,13 +671,13 @@
     "vscode:prepublish": "npm run bundle && npm run build:webview",
     "compile": "tsc -p ./",
     "bundle": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=node18 --minify --sourcemap",
-    "build:webview": "node scripts/build-webview.js",
+    "build:webview": "tsx scripts/build-webview.ts",
     "dev": "npm run compile && npm run bundle && npm run build:webview",
     "watch": "tsc -watch -p ./",
     "test": "npm run compile && node --test out/test/*.test.js",
     "lint": "eslint src",
     "package": "vsce package",
-    "build:spell": "node scripts/build-spell.js"
+    "build:spell": "tsx scripts/build-spell.ts"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
@@ -692,7 +692,9 @@
     "dictionary-pt": "^4.0.0",
     "esbuild": "^0.28.1",
     "eslint": "^10.5.0",
+    "jiti": "^2.7.0",
     "nspell": "^2.1.5",
+    "tsx": "^4.22.4",
     "typescript": "^5.4.0"
   },
   "icon": "media/icon.png",

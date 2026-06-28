@@ -1,9 +1,9 @@
-// ESLint (flat config). Pragmatic: catches real bugs (unawaited promises, unused vars) without
-// being pedantic about `any` (the code handles dynamic JSON on purpose).
-const tseslint = require('@typescript-eslint/eslint-plugin');
-const parser = require('@typescript-eslint/parser');
+// ESLint (flat config, loaded as TypeScript via jiti). Pragmatic: catches real bugs (unawaited
+// promises, unused vars) without being pedantic about `any` (the code handles dynamic JSON on purpose).
+import tseslint from '@typescript-eslint/eslint-plugin';
+import parser from '@typescript-eslint/parser';
 
-module.exports = [
+export default [
   {
     files: ['src/**/*.ts'],
     ignores: ['src/test/**'],

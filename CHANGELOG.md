@@ -5,6 +5,16 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.6.6] - 2026-06-28
+
+### Internal
+- **Zero hand-written `.js` in the whole repo.** The last three were the Node build tooling, now
+  TypeScript: `scripts/build-webview.ts`, `scripts/build-spell.ts` (run via `tsx`) and
+  `eslint.config.ts` (loaded via `jiti`). Added `tsx` + `jiti` as devDeps; `npm run build:webview` /
+  `build:spell` use `tsx`, eslint reads the `.ts` flat config. `build:webview`, `eslint src` and 127
+  tests all pass. The only `.js` left are compiled output (`media/dist/*`, `dist/extension.js`) and
+  vendored libs (`mermaid.min.js`, `spell-engine.js`) — generated/third-party, never source.
+
 ## [2.6.5] - 2026-06-28
 
 ### Internal

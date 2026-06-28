@@ -8,7 +8,7 @@ package-lock.json
 tsconfig.json
 .gitignore
 .eslintrc*
-eslint.config.js
+eslint.config.ts
 .claude/**
 resumen.md
 plan-*.md
