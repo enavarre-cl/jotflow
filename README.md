@@ -197,7 +197,10 @@ Jotflow is **MIT** licensed. It bundles or downloads third‑party components un
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for the release history. **2.6.0** drops the YouTube path for
+See [CHANGELOG.md](CHANGELOG.md) for the release history. **2.6.1–2.6.7** migrate the **entire
+webview to TypeScript** with an esbuild build (zero hand-written `.js` in the repo — only vendored
+libs and generated bundles remain) and add integration tests for the webview↔host protocol and the
+agentic turn. **2.6.0** drops the YouTube path for
 Chatterbox voice cloning (removing yt-dlp entirely): a reference voice is now cloned from a **local
 audio/video file** you pick (ogg/mp4/mp3/wav) with a start/end trim — no network fetch, no ToS gray
 area. **2.5.0** reorganises the ⚙ settings into

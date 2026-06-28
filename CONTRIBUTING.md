@@ -7,32 +7,53 @@
 
 ```bash
 npm install
-npm run compile        # tsc → out/
+npm run dev            # host: tsc → out/ + esbuild → dist/extension.js  ·  webview: esbuild → media/dist/
 ```
 
-Open the folder in VS Code and press **F5** (the “Run Extension” launch config). An *Extension
-Development Host* window opens with the extension loaded. Create a chat from the command palette
-(`Cmd/Ctrl+Shift+P`) → **“Jotflow: New chat”**, or open any file with the `.chat` extension.
+Open the folder in VS Code and press **F5** (the “Run Extension” launch config). Its `preLaunchTask`
+runs `npm run dev`, so F5 rebuilds **both** the host bundle (`dist/extension.js`, what VS Code loads)
+and the webview bundles (`media/dist/*.js`). An *Extension Development Host* window opens with the
+extension loaded. Create a chat from the command palette (`Cmd/Ctrl+Shift+P`) → **“Jotflow: New
+chat”**, or open any file with the `.chat` extension.
 
 > Reloading the dev host (**⌘R / Ctrl+R**) is required after changing `package.json` (commands,
-> menus, views) or the extension host code.
+> menus, views), the extension **host** code (`src/**`), or the **webview** module graph
+> (`media/{app,core,render,ui,features,chat,panels}/**`) — anything that needs a rebuild. CSS and the
+> standalone-panel scripts are served live, so a plain reload suffices for those.
+
+## Webview build
+
+The webview is **TypeScript** (`media/**/*.ts`), bundled by esbuild before it can run in the browser
+sandbox (the browser runs JS, not TS):
+
+- `scripts/build-webview.ts` (run via `tsx`, wired into `npm run dev` and `vscode:prepublish`) emits
+  `media/dist/app.js` — the chat module graph — plus one IIFE bundle per classic global / standalone
+  panel (`i18n`, `spell`, `models`, `modelsFormat`, `voices`, `compare`, `dictionary`, `engines`).
+  esbuild resolves `.js` import specifiers to their `.ts` sources, so imports never need touching.
+- The panels' HTML loads from `media/dist/`. `media/dist/` is **git-ignored** (built on dev/publish).
+- Type-checking is a **separate gate**: `tsc -p media/jsconfig.json` (the chat module graph). Vendored
+  libs (`mermaid.min.js`, `spell-engine.js`) and the generated bundles are the only `.js` left — they
+  are third-party / compiled output, never source.
 
 ## Validation (run after changes)
 
 ```bash
-npm run compile           # tsc → out/
-npm run lint              # eslint src (0 errors / 0 warnings)
-node --check media/*.js   # webview JS syntax (not linted/compiled)
-npm test                  # compile + node:test suite
+npm run compile              # host: tsc → out/   (0 errors)
+npm run lint                 # eslint src         (0 errors / 0 warnings)
+tsc -p media/jsconfig.json   # webview: type-check the .ts module graph (0 errors)
+npm run build:webview        # webview: esbuild → media/dist/*.js (valid bundle)
+npm test                     # compile + node:test suite
 ```
 
 For `package.json`: keep the `%nls%` placeholders in sync with `package.nls*.json`, and ensure
 every menu command is declared in `contributes.commands`.
 
-> **Typing convention:** `src/` is `any`-free. At a real boundary (a `JSON.parse` of external/file
-> input, a VS Code command argument, an LLM API response) type the value as `unknown` and narrow it,
-> or give it a named interface (`Raw*` for parsed `.chat` data, a per-provider response shape) — not
-> `any`. Outbound objects the code *builds* must be fully typed.
+> **Typing convention:** both `src/` (host) and `media/**` (webview) are TypeScript and `any`-free.
+> At a real boundary (a `JSON.parse` of external/file input, a VS Code command argument, an LLM API
+> response, a `window.*` global injected by a classic script) type the value as `unknown` and narrow
+> it, or give it a named interface (`Raw*` for parsed `.chat` data, a per-provider response shape, the
+> ambient globals in `media/globals.d.ts`) — not `any`. Outbound objects the code *builds* must be
+> fully typed.
 
 ## Adding a backend (provider)
 
@@ -70,8 +91,8 @@ factory. To add a provider `foo`:
 
 5. **`package.nls.json`** (+ `es/pt/fr/de/it`) — the new setting/enum descriptions.
 
-6. **(Optional)** gate provider-specific sampling params via the `only:` arrays in the
-   `media/main.js` settings schema.
+6. **(Optional)** gate provider-specific sampling params via the `only:` arrays in the settings
+   schema in `media/panels/config.ts`.
 
 Shared helpers worth reusing: `stream.ts` (NDJSON/SSE line reader), `think.ts` (reasoning
 splitter), `multimodal.ts` (attachments + image-output), `httpError.ts` and `http.ts`
@@ -83,7 +104,7 @@ Regenerate the bundled Hunspell dictionaries (`media/dict/<lang>.{aff,dic,LICENS
 `en, es, pt, fr, de, it`) and the webview `nspell` engine (`media/spell-engine.js`) with:
 
 ```bash
-npm run build:spell      # → scripts/build-spell.js
+npm run build:spell      # → tsx scripts/build-spell.ts
 ```
 
 Dev deps: `nspell`, `dictionary-{en,es,pt,fr,de,it}`, `esbuild`. The `.aff/.dic` and each

@@ -6,7 +6,8 @@
 > **Fuentes sintetizadas:** TypeScript Handbook (*Do's & Don'ts*), MDN (*JS Code Style*,
 > *Organizing CSS*), andredesousa (*typescript-best-practices*, *css-best-practices*),
 > stevekwan (*JS best-practices*), Snyk (*Modern VS Code Extension Development*), W3Schools.
-> Adaptadas a este proyecto: extensión VS Code, host Node + webview sin build, TS `strict`, i18n.
+> Adaptadas a este proyecto: extensión VS Code, host Node + webview **ambos TypeScript bundleados con
+> esbuild**, host TS `strict`, i18n.
 >
 > Convención: el inglés es el idioma fuente del **código**; los ejemplos van en inglés.
 > Relacionados: [ARCHITECTURE.md](ARCHITECTURE.md), [CONTRIBUTING.md](CONTRIBUTING.md),
@@ -202,7 +203,8 @@ Toda vista o panel es un **módulo cerrado**, no un script monolítico. Piezas, 
 `switch` gigantes duplicados a ambos lados.
 **N7.** **ES modules reales** (`import`/`export`), nunca globals colgando de `window`; namespacea lo
 inevitable (`const App = App || {}`).
-**N8.** **`node --check media/*.js`** tras cada cambio (única red de sintaxis del webview).
+**N8.** El webview es **TypeScript** (`media/**/*.ts`), bundleado por esbuild (`scripts/build-webview.ts`)
+a `media/dist/`. Red de tipos: **`tsc -p media/jsconfig.json`** tras cada cambio (gate separado del build).
 **N9.** **Distingue entry-point de módulo por convención** (`*.entry.js` o carpeta `app/`), no por
 dejar dos archivos del mismo nombre en carpetas distintas.
 
@@ -367,10 +369,11 @@ justificado. Las reglas U7–U12 codifican los hallazgos ya vistos.
 ## X. Checklist pre-commit
 
 ```bash
-npm run compile           # tsc → out/   (0 errores)
-npm run lint              # eslint src   (0 errores / 0 warnings)
-node --check media/*.js   # sintaxis del webview JS
-npm test                  # compile + node:test
+npm run compile              # host: tsc → out/   (0 errores)
+npm run lint                 # eslint src   (0 errores / 0 warnings)
+tsc -p media/jsconfig.json   # webview: type-check del grafo .ts (0 errores)
+npm run build:webview        # webview: esbuild → media/dist/*.js
+npm test                     # compile + node:test
 ```
 
 A ojo:

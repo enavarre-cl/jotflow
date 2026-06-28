@@ -5,6 +5,23 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.6.7] - 2026-06-28
+
+### Docs
+- **Docs caught up with the webview TypeScript migration + build.** `CONTRIBUTING.md` now documents
+  the webview build (a new **Webview build** section), uses `npm run dev` for develop-and-run, lists
+  the real validation commands (`tsc -p media/jsconfig.json` + `npm run build:webview` instead of the
+  obsolete `node --check media/*.js`), notes both `src/**` and `media/**` are `any`-free TypeScript,
+  and fixes stale file paths (`media/main.js` → `media/panels/config.ts`, `build-spell.js` → `.ts`).
+  `BEST-PRACTICES.md` corrects the now-false "webview sin build" claim and the `node --check`
+  checklist step. `README.md` notes the migration in its changelog summary.
+
+### Validation
+- Pre-release checks all green: `tsc` (host) · `eslint src` 0/0 · `tsc -p media/jsconfig.json` 0 ·
+  127 tests · `build:webview` valid · no file > 500 lines · `npm audit` 0 vulnerabilities. SECURITY
+  threat model unchanged (the webview still loads nonce'd scripts under the strict CSP; the build adds
+  no external input, and `tsx`/`jiti` are devDeps, not shipped).
+
 ## [2.6.6] - 2026-06-28
 
 ### Internal
