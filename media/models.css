@@ -258,6 +258,18 @@ body.models-browser {
   background: var(--vscode-inputValidation-warningBackground, rgba(226,192,141,.12));
   border: 1px solid var(--vscode-inputValidation-warningBorder, var(--vscode-charts-yellow, #e2c08d));
 }
+/* Contingency notice when the model catalog (Ollama/HF scrape) is in cooldown — visually distinct
+   from a plain "No results" so the user knows the source is down, not that nothing matched. */
+.mb-unavailable {
+  margin: 12px auto;
+  max-width: 34em;
+  padding: 10px 12px;
+  border-radius: 6px;
+  text-align: center;
+  line-height: 1.4;
+  background: var(--vscode-inputValidation-warningBackground, rgba(226,192,141,.12));
+  border: 1px solid var(--vscode-inputValidation-warningBorder, var(--vscode-charts-yellow, #e2c08d));
+}
 .mb-reco b {
   font-family: var(--vscode-editor-font-family, monospace);
 }

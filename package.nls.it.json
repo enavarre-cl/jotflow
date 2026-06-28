@@ -393,5 +393,6 @@
   "config.tts.chatterboxExaggeration.desc": "Emozione/intensità di Chatterbox (0–1). Più alto = più espressivo.",
   "cmd.engines.manage.title": "Gestisci motori",
   "All voices downloaded": "Tutte le voci scaricate",
-  "No voices downloaded yet.": "Nessuna voce ancora scaricata."
+  "No voices downloaded yet.": "Nessuna voce ancora scaricata.",
+  "Model catalog temporarily unavailable. You can still chat with installed models — try the search again in a moment.": "Catalogo dei modelli temporaneamente non disponibile. Puoi comunque chattare con i modelli installati; riprova la ricerca tra un momento."
 }

@@ -23,7 +23,8 @@ function loadBundle(lang: Lang): Record<string, string> {
   if (lang === 'en') return {};
   if (!_bundles[lang]) {
     try {
-      // From out/i18n.js, ../package.nls.<lang>.json resolves to the shipped manifest bundle.
+      // At runtime the bundle lives in dist/, so ../package.nls.<lang>.json resolves to the
+      // extension-root manifest bundle shipped in the .vsix.
       _bundles[lang] = JSON.parse(fs.readFileSync(path.join(__dirname, '..', `package.nls.${lang}.json`), 'utf8'));
     } catch {
       _bundles[lang] = {};

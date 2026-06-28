@@ -5,6 +5,25 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.6.11] - 2026-06-28
+
+### Changed
+- **Graceful degradation for the model browser.** The Ollama / Hugging Face catalog is fetched by
+  scraping first-party HTML, which can change or rate-limit. Each source now sits behind a **circuit
+  breaker** (`src/host/circuitBreaker.ts`): after 3 consecutive failures it opens for 60s, so repeated
+  searches stop hammering a source that's already down (and the user no longer waits for a timeout per
+  keystroke). When a search fails or the breaker is open, the browser shows an explicit **"catalog
+  temporarily unavailable"** notice — visually distinct from "No results" — instead of looking empty.
+  A superseded search (you typed again) is not counted as a failure. **Chatting is unaffected**: it
+  uses installed/configured models on a separate path, so a broken catalog scrape never blocks it.
+  Breakers are per-source (a flaky HF scrape can't trip Ollama's). New notice translated in all 6 langs.
+
+### Internal
+- `CircuitBreaker` is pure and unit-tested (4 new tests, 131 total).
+- **CI now gates every push/PR** (`.github/workflows/ci.yml`): lint · compile · typecheck:webview ·
+  build:webview · test. Previously the suite only ran at manual release time, so a red commit could
+  sit unnoticed on `master`. (CodeQL stays separate via GitHub's default setup.)
+
 ## [2.6.10] - 2026-06-28
 
 ### Internal

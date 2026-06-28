@@ -18,6 +18,7 @@ import { DownloadManager } from './ollama/downloads';
 import { ModelCardCache, ModelCard } from './ollama/cards';
 import { tr, resolvedLang, activeBundle } from './i18n';
 import { makeNonce, errMsg } from './chatHelpers';
+import { CircuitBreaker } from './circuitBreaker';
 
 export interface ModelsPanelHooks {
   /** Refreshes the sidebar after a download. */
@@ -59,6 +60,8 @@ export class ModelsPanel {
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
   private searchAbort: AbortController | undefined;
+  /** One breaker per catalog source — a flaky HF scrape must not trip Ollama's, and vice versa. */
+  private readonly breakers = new Map<ModelSource, CircuitBreaker>();
 
   static show(context: vscode.ExtensionContext, manager: OllamaManager, downloads: DownloadManager, cards: ModelCardCache, hooks: ModelsPanelHooks): void {
     if (ModelsPanel.current) { ModelsPanel.current.panel.reveal(); return; }
@@ -91,6 +94,13 @@ export class ModelsPanel {
   }
 
   private post(msg: Record<string, unknown>): void { void this.panel.webview.postMessage(msg); }
+
+  /** The circuit breaker for a catalog source (lazily created). */
+  private breaker(source: ModelSource): CircuitBreaker {
+    let b = this.breakers.get(source);
+    if (!b) { b = new CircuitBreaker(); this.breakers.set(source, b); }
+    return b;
+  }
 
   /** Current catalog source, read live so a settings change takes effect without reopening. */
   private source(): ModelSource {
@@ -164,13 +174,28 @@ export class ModelsPanel {
           const limit = Math.min(Math.max(Number(msg.limit) || 30, 30), 240);
           const sort = msg.sort || 'relevance';
           const { signal } = this.searchAbort;
-          if (this.source() === 'ollama') {
-            const models = await searchOllama(msg.query || '', limit, signal, toOllamaSort(sort));
-            this.post({ type: 'searchResults', models, limit, officialOrgs: [], source: 'ollama' });
+          const source = this.source();
+          const officialOrgs = source === 'ollama' ? [] : OFFICIAL_ORG_NAMES;
+          const breaker = this.breaker(source);
+          // Source is in cooldown after repeated failures — skip the network hit and show the
+          // contingency state. Chatting with already-installed models is a separate path, unaffected.
+          if (breaker.open) {
+            this.post({ type: 'searchResults', models: [], limit, officialOrgs, source, unavailable: true });
             break;
           }
-          const models = await searchHF(msg.query || '', limit, signal, msg.author || '', sort);
-          this.post({ type: 'searchResults', models, limit, officialOrgs: OFFICIAL_ORG_NAMES, source: 'huggingface' });
+          try {
+            const models = source === 'ollama'
+              ? await searchOllama(msg.query || '', limit, signal, toOllamaSort(sort))
+              : await searchHF(msg.query || '', limit, signal, msg.author || '', sort);
+            breaker.recordSuccess();
+            this.post({ type: 'searchResults', models, limit, officialOrgs, source });
+          } catch {
+            // A superseded search (the user typed again → aborted) is not a source failure; ignore it.
+            if (!signal.aborted) {
+              breaker.recordFailure();
+              this.post({ type: 'searchResults', models: [], limit, officialOrgs, source, unavailable: true });
+            }
+          }
           break;
         }
         case 'detail': {

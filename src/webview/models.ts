@@ -21,6 +21,7 @@
   let sortBy = 'relevance';     // Best Match by default (like LM Studio)
   let ollamaHasKey = false;     // whether an Ollama API key is configured (host-reported)
   let searchSource = 'ollama';  // active catalog source (host-reported); drives the filter bar
+  let catalogUnavailable = false; // last search failed / source in cooldown → show contingency text
 
   // Provider and sort order are filtered on the server. Capabilities are NOT filtered (only shown
   // as estimated badges): relying on a heuristic to hide results leads to inconsistencies.
@@ -86,7 +87,12 @@
 
   function renderList() {
     const vis = visibleResults();
-    if (!vis.length) { listEl.innerHTML = `<div class="mb-muted">${esc(t('No results'))}</div>`; return; }
+    if (!vis.length) {
+      listEl.innerHTML = catalogUnavailable
+        ? `<div class="mb-muted mb-unavailable">${esc(t('Model catalog temporarily unavailable. You can still chat with installed models — try the search again in a moment.'))}</div>`
+        : `<div class="mb-muted">${esc(t('No results'))}</div>`;
+      return;
+    }
     listEl.innerHTML = '';
     for (const m of vis) {
       const row = document.createElement('div');
@@ -284,6 +290,7 @@
     const msg = ev.data || {};
     switch (msg.type) {
       case 'searchResults': {
+        catalogUnavailable = !!msg.unavailable;
         lastFetchCount = (msg.models || []).length;
         if (typeof msg.limit === 'number') currentLimit = msg.limit;
         if (msg.source) searchSource = msg.source;
