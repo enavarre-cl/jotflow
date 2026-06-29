@@ -6,6 +6,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { ToolSchema } from './providers';
 import { killProcessTree } from './procKill';
 import { errMsg } from './chatHelpers';
+import { runElicitation, isConfirmation, confirmationAcceptContent, RequestedSchema } from './mcpElicit';
 
 /** Cap on the stdio line buffer: a server emitting an unbounded line would otherwise OOM. */
 const MAX_MCP_BUFFER = 8 * 1024 * 1024;
@@ -28,6 +29,7 @@ interface McpTool {
 interface JsonRpcMessage {
   id?: number;
   method?: string;          // present → a server-initiated request (with id) or notification (no id)
+  params?: unknown;
   result?: unknown;
   error?: { message?: string };
 }
@@ -93,7 +95,8 @@ class McpClient {
 
     await this.request('initialize', {
       protocolVersion: '2024-11-05',
-      capabilities: { roots: { listChanged: true } }, // we answer roots/list and notify on changes
+      // We answer roots/list (+ notify on changes) and elicitation/create (server asks the user input).
+      capabilities: { roots: { listChanged: true }, elicitation: {} },
       clientInfo: { name: 'jotflow', version: '0.1.0' },
     });
     this.notify('notifications/initialized', {});
@@ -115,9 +118,9 @@ class McpClient {
       } catch {
         continue;
       }
-      // Server-initiated request (method + id) → we must reply (e.g. roots/list).
+      // Server-initiated request (method + id) → we must reply (e.g. roots/list, elicitation/create).
       if (typeof msg.method === 'string' && msg.id !== undefined) {
-        this.handleServerRequest(msg.id, msg.method);
+        this.handleServerRequest(msg.id, msg.method, msg.params);
         continue;
       }
       // Server notification (method, no id) → nothing to do.
@@ -132,12 +135,30 @@ class McpClient {
     }
   }
 
-  /** Reply to a server→client request. We support `roots/list`; anything else → method-not-found. */
-  private handleServerRequest(id: number, method: string): void {
+  /** Reply to a server→client request. We support `roots/list` and `elicitation/create`. */
+  private handleServerRequest(id: number, method: string, params: unknown): void {
     if (method === 'roots/list') {
       this.send({ jsonrpc: '2.0', id, result: { roots: currentRoots(this.config) } });
+    } else if (method === 'elicitation/create') {
+      void this.handleElicitation(id, params); // async (shows UI), replies when resolved
     } else {
       this.send({ jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${method}` } });
+    }
+  }
+
+  /** Prompt the user for the input a server requested (or auto-accept a confirmation if configured). */
+  private async handleElicitation(id: number, params: unknown): Promise<void> {
+    const p = (params ?? {}) as { message?: string; requestedSchema?: RequestedSchema };
+    // Name the server so the user knows who's asking before they answer.
+    const message = `${this.config.name}: ${p.message ?? 'requesting input.'}`;
+    try {
+      const autoAccept = vscode.workspace.getConfiguration('jotflow').get<boolean>('mcp.autoAcceptElicitations', false);
+      const result = autoAccept && isConfirmation(p.requestedSchema)
+        ? { action: 'accept' as const, content: confirmationAcceptContent(p.requestedSchema) }
+        : await runElicitation(message, p.requestedSchema);
+      this.send({ jsonrpc: '2.0', id, result });
+    } catch {
+      this.send({ jsonrpc: '2.0', id, result: { action: 'cancel' } });
     }
   }
 

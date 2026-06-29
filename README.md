@@ -129,7 +129,9 @@ With **Tools** on (⚙, available on every backend), the model can call tools in
 - **MCP servers**: define them in a **`.mcp/`** folder (one `*.json` per server) or a **`.mcp.json`**
   at the workspace root. Each server's tools are exposed as `server__tool`. Jotflow advertises your
   **workspace folders as MCP roots** (plus a server's own `cwd`), so servers know which directories to
-  operate within — re-advertised if the folders change.
+  operate within — re-advertised if the folders change. A server can also **elicit** input from you
+  mid-task (a confirmation or a small form, rendered as a VS Code prompt); set
+  `jotflow.mcp.autoAcceptElicitations` to skip the dialog on plain yes/no confirmations.
 
 The loop runs up to `jotflow.tools.maxIterations` rounds per turn (default **8**; **`0` = unlimited**,
 ending only when the model stops requesting tools or you press Stop).
@@ -173,6 +175,7 @@ Settings under `Settings → Jotflow`:
 | `jotflow.maxTokens` | `2048` | Max tokens (`-1` = unlimited) |
 | `jotflow.tools.maxIterations` | `8` | Max agentic tool-loop rounds per turn (`0` = unlimited) |
 | `jotflow.tools.maxReadBytes` | `100000` | Max bytes returned by the native `fs_read` tool (`0` = unlimited) |
+| `jotflow.mcp.autoAcceptElicitations` | `false` | Auto-accept **confirmation** prompts from MCP servers (yes/no) without a dialog; data requests still ask |
 | `jotflow.tts.chatterboxModel` | `multilingual` | Chatterbox model: `multilingual` (23 languages) or `english` (lighter). Ignored on Apple Silicon (always the MLX multilingual model) |
 | `jotflow.tts.chatterboxDevice` | `auto` | Compute device for the PyTorch Chatterbox backend: `auto` / `mps` / `cuda` / `cpu` |
 | `jotflow.tts.chatterboxExaggeration` | `0.5` | Chatterbox emotion/intensity (0–1) |

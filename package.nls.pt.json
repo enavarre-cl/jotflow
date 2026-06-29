@@ -389,5 +389,6 @@
   "cmd.engines.manage.title": "Gerenciar motores",
   "All voices downloaded": "Todas as vozes baixadas",
   "No voices downloaded yet.": "Nenhuma voz baixada ainda.",
-  "Model catalog temporarily unavailable. You can still chat with installed models — try the search again in a moment.": "Catálogo de modelos temporariamente indisponível. Você ainda pode conversar com os modelos instalados; tente a busca novamente em instantes."
+  "Model catalog temporarily unavailable. You can still chat with installed models — try the search again in a moment.": "Catálogo de modelos temporariamente indisponível. Você ainda pode conversar com os modelos instalados; tente a busca novamente em instantes.",
+  "config.mcp.autoAcceptElicitations.desc": "Aceita automaticamente as **confirmações** (sim/não, sem pedir dados) dos servidores MCP, sem mostrar diálogo. Pedidos de dados (texto, opções) continuam sempre a perguntar. Ative apenas para servidores em que confia — um servidor poderia disfarçar uma ação arriscada de simples confirmação."
 }

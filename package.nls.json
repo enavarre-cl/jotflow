@@ -70,5 +70,6 @@
   "config.tts.chatterboxModel.desc": "Chatterbox model: **multilingual** (default — 23 languages; each voice speaks its own language automatically) or **english** (lighter, English only).",
   "config.tts.chatterboxDevice.desc": "Compute device for Chatterbox: **auto** (MPS on Apple Silicon, CUDA if available, else CPU), or force one. CPU is slow.",
   "config.tts.chatterboxExaggeration.desc": "Chatterbox emotion/intensity (0–1). Higher is more expressive.",
-  "cmd.engines.manage.title": "Manage engines"
+  "cmd.engines.manage.title": "Manage engines",
+  "config.mcp.autoAcceptElicitations.desc": "Auto-accept **confirmation** prompts from MCP servers (yes/no, no data requested) without showing a dialog. Requests for data (text, choices) still always ask. Enable only for servers you trust — a server could phrase a risky action as a simple confirmation."
 }

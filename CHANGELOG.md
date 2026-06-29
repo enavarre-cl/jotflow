@@ -5,6 +5,20 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.6.16] - 2026-06-28
+
+### Added
+- **MCP elicitation.** Servers can now request input from you mid-task (`elicitation/create`): Jotflow
+  renders the server's flat schema as native VS Code UI — a modal confirmation for a yes/no, a quick
+  pick for an `enum` or boolean, an input box (with numeric validation) for text/numbers — and replies
+  `{ action: accept | decline | cancel, content }`. The prompt is prefixed with the server name so you
+  know who's asking. The `elicitation` capability is declared in the handshake.
+- **`jotflow.mcp.autoAcceptElicitations`** (default off). Auto-accepts **confirmation-style**
+  elicitations (no fields, or a single boolean) without a dialog; requests for actual data (text,
+  choices) still always prompt. Enable only for trusted servers. The schema logic is pure and
+  unit-tested (`isConfirmation` / `confirmationAcceptContent`, 4 new tests; 140 total). The UI lives in
+  `src/host/mcpElicit.ts` (keeps `mcp.ts` small).
+
 ## [2.6.15] - 2026-06-28
 
 ### Added

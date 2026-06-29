@@ -2,7 +2,7 @@
   "name": "jotflow",
   "displayName": "Jotflow",
   "description": "%ext.description%",
-  "version": "2.6.15",
+  "version": "2.6.16",
   "publisher": "enavarre",
   "license": "MIT",
   "engines": {
@@ -584,6 +584,11 @@
             "default": 8,
             "minimum": 0,
             "markdownDescription": "%config.tools.maxIterations.desc%"
+          },
+          "jotflow.mcp.autoAcceptElicitations": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "%config.mcp.autoAcceptElicitations.desc%"
           }
         }
       },
