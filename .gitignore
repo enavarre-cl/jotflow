@@ -13,3 +13,6 @@ media/icon-jotflow-full*.png
 jotflow-settings.local.json
 *.local.json
 __pycache__/
+# local MCP test servers/configs (e.g. the elicitation demo) — never committed
+.mcp/
+.mcp-demo/
