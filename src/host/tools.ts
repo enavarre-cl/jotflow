@@ -8,6 +8,7 @@ import { ToolSchema } from './providers';
 import { ipIsPrivate } from './net';
 import { safeWebFetch } from './http';
 import { errMsg } from './chatHelpers';
+import { runShellCommand, confirmCommand } from './shellTool';
 
 /** Rejects a host that resolves to an internal/private IP (anti-SSRF). Checks ALL its IPs. */
 async function assertSafeHost(hostname: string): Promise<void> {
@@ -112,8 +113,22 @@ function maxReadBytes(): number {
   return typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : DEFAULT_MAX_READ;
 }
 
-/** Native workspace filesystem tools (fs_ prefix). `signal` lets a long tool (web_fetch) be aborted. */
-const BUILTIN: { schema: ToolSchema; run: (args: Record<string, unknown>, signal?: AbortSignal) => Promise<string> }[] = [
+/**
+ * Pure: apply an exact-text edit. Literal find+replace via slice/split (no regex, so `$`/special
+ * chars in either side are inert). Throws if the text is missing or ambiguous (without replace_all).
+ */
+export function applyTextEdit(content: string, oldText: string, newText: string, replaceAll: boolean): { text: string; count: number } {
+  if (oldText === '') throw new Error('old_text is empty.');
+  const count = content.split(oldText).length - 1;
+  if (count === 0) throw new Error('old_text not found in the file.');
+  if (count > 1 && !replaceAll) throw new Error(`old_text appears ${count} times — make it unique or set replace_all.`);
+  if (replaceAll) return { text: content.split(oldText).join(newText), count };
+  const i = content.indexOf(oldText);
+  return { text: content.slice(0, i) + newText + content.slice(i + oldText.length), count: 1 };
+}
+
+/** Native workspace tools (fs_*, web, editor, shell). `signal` lets a long tool be aborted (Stop). */
+const BUILTIN: { schema: ToolSchema; enabled?: () => boolean; run: (args: Record<string, unknown>, signal?: AbortSignal) => Promise<string> }[] = [
   {
     schema: {
       name: 'fs_list',
@@ -172,6 +187,73 @@ const BUILTIN: { schema: ToolSchema; run: (args: Record<string, unknown>, signal
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, String(a?.content ?? ''), 'utf8');
       return `Written: ${a.path} (${Buffer.byteLength(String(a?.content ?? ''))} bytes)`;
+    },
+  },
+  {
+    schema: {
+      name: 'fs_edit',
+      description: 'Edits a file by replacing an exact text fragment (cheaper and safer than rewriting it whole). old_text must be unique unless replace_all is set.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string' },
+          old_text: { type: 'string', description: 'Exact text to find (verbatim, incl. whitespace)' },
+          new_text: { type: 'string', description: 'Replacement text' },
+          replace_all: { type: 'boolean', description: 'Replace every occurrence' },
+        },
+        required: ['path', 'old_text', 'new_text'],
+      },
+    },
+    run: async (a) => {
+      if (!vscode.workspace.isTrusted) throw new Error('Editing disabled: the workspace is not trusted.');
+      const file = resolveInWorkspace(String(a?.path ?? ''));
+      assertWritable(file); // no .git/ .vscode/ .mcp.json .mcp/
+      const original = fs.readFileSync(file, 'utf8');
+      const { text, count } = applyTextEdit(original, String(a?.old_text ?? ''), String(a?.new_text ?? ''), a?.replace_all === true);
+      fs.writeFileSync(file, text, 'utf8');
+      return `Edited: ${a.path} (${count} replacement${count === 1 ? '' : 's'})`;
+    },
+  },
+  {
+    schema: {
+      name: 'fs_delete',
+      description: 'Deletes a file (or a folder with recursive=true) in the workspace.',
+      parameters: {
+        type: 'object',
+        properties: { path: { type: 'string' }, recursive: { type: 'boolean', description: 'Delete a folder and its contents' } },
+        required: ['path'],
+      },
+    },
+    run: async (a) => {
+      if (!vscode.workspace.isTrusted) throw new Error('Deleting disabled: the workspace is not trusted.');
+      const target = resolveInWorkspace(String(a?.path ?? ''));
+      assertWritable(target);
+      if ((vscode.workspace.workspaceFolders ?? []).some((f) => f.uri.fsPath === target)) throw new Error('Refusing to delete a workspace root.');
+      const st = fs.statSync(target); // throws a clear error if it doesn't exist
+      if (st.isDirectory() && a?.recursive !== true) fs.rmdirSync(target); // empty dir only
+      else fs.rmSync(target, { recursive: a?.recursive === true });
+      return `Deleted: ${a.path}`;
+    },
+  },
+  {
+    schema: {
+      name: 'fs_move',
+      description: 'Moves or renames a file/folder within the workspace.',
+      parameters: {
+        type: 'object',
+        properties: { from: { type: 'string' }, to: { type: 'string' } },
+        required: ['from', 'to'],
+      },
+    },
+    run: async (a) => {
+      if (!vscode.workspace.isTrusted) throw new Error('Moving disabled: the workspace is not trusted.');
+      const from = resolveInWorkspace(String(a?.from ?? ''));
+      const to = resolveInWorkspace(String(a?.to ?? ''));
+      assertWritable(from); assertWritable(to); // neither side touches .git/ .vscode/ .mcp
+      fs.statSync(from); // throws if the source is missing
+      fs.mkdirSync(path.dirname(to), { recursive: true });
+      fs.renameSync(from, to);
+      return `Moved: ${a.from} → ${a.to}`;
     },
   },
   {
@@ -337,6 +419,27 @@ const BUILTIN: { schema: ToolSchema; run: (args: Record<string, unknown>, signal
       return out;
     },
   },
+  {
+    schema: {
+      name: 'run_command',
+      description: 'Runs a shell command in the workspace root and returns its output (stdout+stderr). Disabled by default — enable the jotflow.tools.shell setting.',
+      parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] },
+    },
+    // Arbitrary code execution → only offered when explicitly opted in.
+    enabled: () => vscode.workspace.getConfiguration('jotflow').get<boolean>('tools.shell', false),
+    run: async (a, signal) => {
+      if (!vscode.workspace.isTrusted) throw new Error('Shell disabled: the workspace is not trusted.');
+      const cfg = vscode.workspace.getConfiguration('jotflow');
+      if (!cfg.get<boolean>('tools.shell', false)) throw new Error('The run_command tool is disabled (enable jotflow.tools.shell).');
+      const command = String(a?.command ?? '').trim();
+      if (!command) throw new Error('No command provided.');
+      // Human-in-the-loop: confirm each command unless the user opted into auto-approve.
+      if (!cfg.get<boolean>('tools.shellAutoApprove', false) && !(await confirmCommand(command))) {
+        return 'Command denied by the user.';
+      }
+      return runShellCommand(command, workspaceRoot(), signal);
+    },
+  },
 ];
 
 /** Aggregates native (filesystem) tools and MCP server tools, and routes their execution. */
@@ -348,7 +451,9 @@ export class ToolHub {
   }
 
   schemas(): ToolSchema[] {
-    return [...BUILTIN.map((b) => b.schema), ...this.mcp.toolSchemas()];
+    // Skip opt-in tools (run_command) that aren't enabled, so the model isn't offered a tool that errors.
+    const builtin = BUILTIN.filter((b) => !b.enabled || b.enabled());
+    return [...builtin.map((b) => b.schema), ...this.mcp.toolSchemas()];
   }
 
   async call(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<string> {

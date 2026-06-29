@@ -124,8 +124,13 @@ panels are open, which **⚙ settings sections** you left expanded, and the chat
 With **Tools** on (⚙, available on every backend), the model can call tools in an agentic loop:
 
 - **Workspace filesystem & helpers** (native, no setup): `fs_list`, `fs_read`, `fs_write`,
+  `fs_edit` (exact-text patch — cheaper/safer than a full rewrite), `fs_delete`, `fs_move`,
   `fs_glob`, `fs_search`, plus `editor_context`, `web_fetch` and `get_datetime`. File tools are
-  **confined to the workspace folder** (resolved + `realpath`‑checked against symlink escape).
+  **confined to the workspace folder** (resolved + `realpath`‑checked against symlink escape) and
+  never touch `.git/`, `.vscode/` or the MCP configs.
+- **Shell** (`run_command`, **off by default**): runs a shell command in the workspace root. Enable
+  with **`jotflow.tools.shell`** — it's arbitrary code execution, so it only runs in a **trusted
+  workspace** and **asks you to confirm each command** (skip with `jotflow.tools.shellAutoApprove`).
 - **MCP servers**: define them in a **`.mcp/`** folder (one `*.json` per server) or a **`.mcp.json`**
   at the workspace root. Each server's tools are exposed as `server__tool`. Jotflow advertises your
   **workspace folders as MCP roots** (plus a server's own `cwd`), so servers know which directories to
@@ -176,6 +181,8 @@ Settings under `Settings → Jotflow`:
 | `jotflow.tools.maxIterations` | `8` | Max agentic tool-loop rounds per turn (`0` = unlimited) |
 | `jotflow.tools.maxReadBytes` | `100000` | Max bytes returned by the native `fs_read` tool (`0` = unlimited) |
 | `jotflow.mcp.autoAcceptElicitations` | `false` | Auto-accept **confirmation** prompts from MCP servers (yes/no) without a dialog; data requests still ask |
+| `jotflow.tools.shell` | `false` | Enable the `run_command` shell tool (**arbitrary code execution**; trusted workspace + per-command confirm) |
+| `jotflow.tools.shellAutoApprove` | `false` | Run `run_command` commands **without** the confirmation dialog (**dangerous**) |
 | `jotflow.tts.chatterboxModel` | `multilingual` | Chatterbox model: `multilingual` (23 languages) or `english` (lighter). Ignored on Apple Silicon (always the MLX multilingual model) |
 | `jotflow.tts.chatterboxDevice` | `auto` | Compute device for the PyTorch Chatterbox backend: `auto` / `mps` / `cuda` / `cpu` |
 | `jotflow.tts.chatterboxExaggeration` | `0.5` | Chatterbox emotion/intensity (0–1) |

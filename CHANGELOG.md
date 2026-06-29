@@ -5,6 +5,21 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.6.17] - 2026-06-28
+
+### Added
+- **More agentic file tools.** `fs_edit` (exact-text patch — far cheaper/safer than rewriting a file
+  whole), `fs_delete`, and `fs_move`. They follow the existing `fs_write` gating: trusted workspace,
+  deny `.git/` `.vscode/` `.mcp.json` `.mcp/`, workspace-confined with a `realpath` symlink check
+  (`fs_delete` also refuses a workspace root). `fs_edit`'s find+replace is **literal** (slice/split, so
+  `$` and regex chars are inert) and refuses an ambiguous match unless `replace_all`.
+- **`run_command` shell tool — off by default.** Lets the model run shell commands (`ls`, build/test
+  scripts) in the workspace root. It's arbitrary code execution, so it's gated hard: enable
+  **`jotflow.tools.shell`**, runs **only in a trusted workspace**, and **confirms each command** (modal)
+  unless **`jotflow.tools.shellAutoApprove`**. Output is capped, 60 s timeout, tree-killed on Stop;
+  it isn't even offered to the model unless enabled. Executor in `src/host/shellTool.ts`.
+- Pure logic unit-tested (`applyTextEdit`, `capOutput`, `runShellCommand`; +10 tests, 150 total).
+
 ## [2.6.16] - 2026-06-28
 
 ### Added
