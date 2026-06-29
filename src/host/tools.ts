@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import * as dns from 'dns';
 import { StringDecoder } from 'string_decoder';
 import { McpManager } from './mcp';
@@ -46,19 +47,26 @@ function withinAnyFolder(abs: string): boolean {
   return false;
 }
 
+// A private scratch dir OUTSIDE the workspace for throwaway files (created on first use via the
+// temp_dir tool, cleaned up on dispose). Bounded: only THIS dir is allowed, never the rest of /tmp.
+let scratchDir: string | undefined;
+function getScratchDir(): string { return (scratchDir ??= fs.mkdtempSync(path.join(os.tmpdir(), 'jotflow-'))); }
+function cleanupScratch(): void {
+  if (scratchDir) { try { fs.rmSync(scratchDir, { recursive: true, force: true }); } catch { /* best effort */ } scratchDir = undefined; }
+}
+
 /**
- * Resolves a path within ANY workspace folder (multi-root): tries each folder and uses the one
- * where the resolved path exists; if none exists, uses the first valid folder (e.g. for fs_write).
- * Never escapes the folders (neither via `..` nor symlink).
+ * Resolves a path within ANY allowed root — every workspace folder (multi-root) plus the scratch dir
+ * once created — using the one where the path exists; else the first valid root (e.g. for fs_write).
+ * Never escapes a root (neither via `..` nor symlink).
  */
 function resolveInWorkspace(p: string): string {
-  const folders = vscode.workspace.workspaceFolders ?? [];
-  if (!folders.length) throw new Error('No workspace folder is open.');
+  const roots = [...(vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath), ...(scratchDir ? [scratchDir] : [])];
+  if (!roots.length) throw new Error('No workspace folder is open.');
   let chosen: { abs: string; root: string } | null = null;
-  for (const f of folders) {
-    const root = f.uri.fsPath;
+  for (const root of roots) {
     const abs = path.resolve(root, p || '.');
-    if (abs !== root && !abs.startsWith(root + path.sep)) continue; // outside THIS folder
+    if (abs !== root && !abs.startsWith(root + path.sep)) continue; // outside THIS root
     if (!chosen) chosen = { abs, root };          // first valid candidate
     if (fs.existsSync(abs)) { chosen = { abs, root }; break; } // prefer where it exists
   }
@@ -255,6 +263,14 @@ const BUILTIN: { schema: ToolSchema; enabled?: () => boolean; run: (args: Record
       fs.renameSync(from, to);
       return `Moved: ${a.from} → ${a.to}`;
     },
+  },
+  {
+    schema: {
+      name: 'temp_dir',
+      description: 'Returns (creating on first call) a private scratch directory OUTSIDE the workspace. Use it for throwaway files, experiments or builds that must NOT touch the project. Absolute paths under it work with the fs_* tools and run_command.',
+      parameters: { type: 'object', properties: {} },
+    },
+    run: async () => getScratchDir(),
   },
   {
     schema: {
@@ -475,5 +491,6 @@ export class ToolHub {
 
   dispose(): void {
     this.mcp.dispose();
+    cleanupScratch(); // remove the throwaway /tmp/jotflow-… dir
   }
 }

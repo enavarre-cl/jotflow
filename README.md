@@ -125,9 +125,11 @@ With **Tools** on (⚙, available on every backend), the model can call tools in
 
 - **Workspace filesystem & helpers** (native, no setup): `fs_list`, `fs_read`, `fs_write`,
   `fs_edit` (exact-text patch — cheaper/safer than a full rewrite), `fs_delete`, `fs_move`,
-  `fs_glob`, `fs_search`, plus `editor_context`, `web_fetch` and `get_datetime`. File tools are
-  **confined to the workspace folder** (resolved + `realpath`‑checked against symlink escape) and
-  never touch `.git/`, `.vscode/` or the MCP configs.
+  `fs_glob`, `fs_search`, plus `editor_context`, `web_fetch`, `get_datetime` and `temp_dir`. File
+  tools are **confined to the workspace folder** (resolved + `realpath`‑checked against symlink
+  escape) and never touch `.git/`, `.vscode/` or the MCP configs. `temp_dir` returns a private
+  **scratch directory outside the workspace** (`/tmp/jotflow-…`) for throwaway files that must not
+  touch the project — bounded to that dir only, and cleaned up on close.
 - **Shell** (`run_command`, **off by default**): runs a shell command in the workspace root. Enable
   with **`jotflow.tools.shell`** — it's arbitrary code execution, so it only runs in a **trusted
   workspace** and **asks you to confirm each command** (skip with `jotflow.tools.shellAutoApprove`).

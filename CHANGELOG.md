@@ -5,6 +5,15 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.6.18] - 2026-06-28
+
+### Added
+- **`temp_dir` scratch directory.** A new tool returns a private throwaway directory **outside the
+  workspace** (`/tmp/jotflow-…`, created on first use, removed on close), so the model can write or run
+  throwaway files without touching your project. It's **bounded**: the fs tools allow only that dir (and
+  the workspace folders), never the rest of `/tmp` — every path stays `realpath`-checked against `..`
+  escape, and writing there still requires Workspace Trust.
+
 ## [2.6.17] - 2026-06-28
 
 ### Added
