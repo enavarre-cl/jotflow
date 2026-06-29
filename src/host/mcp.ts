@@ -173,8 +173,8 @@ class McpClient {
    * The pending-call map below is the heterogeneous plumbing that routes each reply back, so it holds
    * the value as `unknown` until this typed boundary casts it to `T`.
    */
-  private request<T>(method: string, params: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
-    // The server already died: fail immediately instead of waiting out the 30s timeout.
+  private request<T>(method: string, params: Record<string, unknown>, signal?: AbortSignal, timeoutMs = 30000): Promise<T> {
+    // The server already died: fail immediately instead of waiting out the timeout.
     if (!this.alive) return Promise.reject(new Error('The MCP server is not running.'));
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
@@ -189,7 +189,7 @@ class McpClient {
       };
       const settle = resolve as (v: unknown) => void;
       const onAbort = () => finish(reject, new Error('Stopped.'));
-      const timer = setTimeout(() => finish(reject, new Error(`MCP timeout: ${method}`)), 30000);
+      const timer = setTimeout(() => finish(reject, new Error(`MCP timeout: ${method}`)), timeoutMs);
       // The pending map routes the server's reply (onData) through finish so the timer/listener clear.
       this.pending.set(id, { resolve: (v) => finish(settle, v), reject: (e) => finish(reject, e) });
       this.send({ jsonrpc: '2.0', id, method, params });
@@ -207,7 +207,9 @@ class McpClient {
   }
 
   async callTool(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
-    const res = await this.request<ToolCallResult>('tools/call', { name, arguments: args ?? {} }, signal);
+    // A tool may run long or pause for an elicitation (waiting on the user), so give it a generous
+    // 10-min ceiling instead of the 30s handshake timeout; the turn's Stop signal still cancels it.
+    const res = await this.request<ToolCallResult>('tools/call', { name, arguments: args ?? {} }, signal, 600_000);
     const content = Array.isArray(res?.content) ? res.content : [];
     const text = content
       .map((c) => (c?.type === 'text' ? c.text : JSON.stringify(c)))

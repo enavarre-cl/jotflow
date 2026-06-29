@@ -5,6 +5,14 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.6.19] - 2026-06-28
+
+### Fixed
+- **MCP tool calls no longer time out at 30s.** A `tools/call` that runs long or **pauses for an
+  elicitation** (waiting on the user to answer) was being killed by the 30s handshake timeout. Tool
+  calls now get a 10-minute ceiling; the handshake (`initialize`/`tools/list`) keeps its 30s, and the
+  turn's **Stop** still cancels instantly.
+
 ## [2.6.18] - 2026-06-28
 
 ### Added
