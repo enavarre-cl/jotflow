@@ -5,6 +5,18 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.6.22] - 2026-06-29
+
+### Added
+- **`fs_read` paginates large files.** It now takes an `offset` (byte) param, and when a file exceeds
+  the read cap it reports the exact offset to resume at (*"call fs_read again with offset: N"*) so the
+  model can walk the whole file in windows. Reads stay **byte-based and character-aligned**: a window
+  boundary never splits a multibyte UTF-8 char across reads — `nextOffset` lands after the last
+  *complete* character — so paginated reads reassemble byte-for-byte with no `�`. Binary (incl. UTF-16,
+  whose NUL bytes trip the check) is still rejected, and a giant single-line file never loads whole.
+  Logic extracted to `src/host/fsRead.ts`, unit-tested (4 tests incl. a 7-byte-window multibyte sweep;
+  154 total).
+
 ## [2.6.21] - 2026-06-29
 
 ### Changed

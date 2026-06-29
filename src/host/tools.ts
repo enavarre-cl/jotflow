@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as dns from 'dns';
-import { StringDecoder } from 'string_decoder';
+import { readTextWindow } from './fsRead';
 import { McpManager } from './mcp';
 import { ToolSchema } from './providers';
 import { ipIsPrivate } from './net';
@@ -153,30 +153,25 @@ const BUILTIN: { schema: ToolSchema; enabled?: () => boolean; run: (args: Record
   {
     schema: {
       name: 'fs_read',
-      description: 'Reads the contents of a text file in the workspace.',
-      parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
+      description: 'Reads a text file in the workspace. For a large file, pass offset (a byte position) to read the next window — the result says where to continue.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string' },
+          offset: { type: 'number', description: 'Byte offset to start at (use the value the previous read reported)' },
+        },
+        required: ['path'],
+      },
     },
     run: async (a) => {
       const file = resolveInWorkspace(String(a?.path ?? ''));
-      const st = fs.statSync(file);
-      if (st.isDirectory()) throw new Error('Path is a directory — use fs_list.');
-      const limit = maxReadBytes();
-      const size = st.size;
-      // Read at most `limit` bytes: never loads a giant file entirely into memory.
-      const toRead = Math.min(size, limit);
-      const fd = fs.openSync(file, 'r');
-      try {
-        const buf = Buffer.alloc(toRead);
-        const read = fs.readSync(fd, buf, 0, toRead, 0); // may be < toRead; decode only what we got
-        const slice = buf.subarray(0, read);
-        if (slice.includes(0)) throw new Error('Binary file (contains NUL bytes) — not a text file.');
-        // StringDecoder buffers a trailing partial multibyte char instead of emitting U+FFFD, so a
-        // mid-character truncation at the byte limit doesn't append a stray replacement glyph.
-        const text = new StringDecoder('utf8').write(slice);
-        return size > limit ? text + `\n… (truncated, ${size} bytes)` : text;
-      } finally {
-        fs.closeSync(fd);
-      }
+      if (fs.statSync(file).isDirectory()) throw new Error('Path is a directory — use fs_list.');
+      const offset = Math.max(0, Math.floor(Number(a?.offset) || 0));
+      // Byte window, character-aligned (never splits a multibyte char across reads); never loads it all.
+      const w = readTextWindow(file, offset, maxReadBytes());
+      return w.more
+        ? w.text + `\n… (read bytes ${offset}–${w.nextOffset} of ${w.size}; call fs_read again with offset: ${w.nextOffset} to continue)`
+        : w.text;
     },
   },
   {
