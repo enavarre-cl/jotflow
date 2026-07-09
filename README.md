@@ -212,7 +212,8 @@ Jotflow is **MIT** licensed. It bundles or downloads third‑party components un
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for the release history. **2.8.4** lets you edit a message's
+See [CHANGELOG.md](CHANGELOG.md) for the release history. **2.8.5** fixes **Summarize** on Ollama with
+a large context (it no longer truncates the block being summarized). **2.8.4** lets you edit a message's
 **attachments** (remove/add photos), not just its text. **2.8.3** fixes cross-folder system-prompt
 globs (`../systems/*.md`) and flags missing layers in **red**. **2.8.2** polishes the side panels —
 **collapsible** tool activity with 256-char previews, and a tidier system-prompt layer list

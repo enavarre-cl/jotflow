@@ -5,6 +5,17 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.8.5] - 2026-06-29
+
+### Fixed
+- **"Summarize" now works with a large context on Ollama.** The summary request passed no `num_ctx`, so
+  Ollama ran it with its small default window and **silently truncated** the block being summarized to
+  its tail — a 50k-token conversation produced an empty/partial summary ("resumir doesn't do anything").
+  The summary call now sizes `num_ctx` to fit the whole input (+ the reply), honoring the configured
+  window as a floor and 128k as the ceiling (`summaryContextTokens`, unit-tested). Once summarization
+  compacts the context, the main chat fits even a modest window — so you no longer need a huge main
+  `num_ctx` just to be able to summarize.
+
 ## [2.8.4] - 2026-06-29
 
 ### Added

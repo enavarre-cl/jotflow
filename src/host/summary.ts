@@ -1,7 +1,17 @@
 import * as vscode from 'vscode';
-import { buildProvider, ChatMessage } from './providers';
+import { buildProvider, ChatMessage, GenerationParams } from './providers';
 import { tr } from './i18n';
+import { estTokens } from './chatHelpers';
 import { ChatDoc } from './chatDocument';
+
+/** num_ctx for a summary call. Ollama silently truncates the prompt to num_ctx, so with its small
+ *  default a large block would be cut to its tail and the summary would miss most of the conversation.
+ *  Size the window to fit the whole input + the reply, honoring the user's configured window as a
+ *  floor and 128k as the ceiling, rounded up to Ollama's 256-token step. */
+export function summaryContextTokens(inputTokens: number, configured: number): number {
+  const needed = inputTokens + 1024 /* reply */ + 512 /* headroom */;
+  return Math.min(131072, Math.ceil(Math.max(needed, configured, 4096) / 256) * 256);
+}
 
 export interface SummaryDeps {
   webview: vscode.Webview;
@@ -31,6 +41,15 @@ export function makeSummary(deps: SummaryDeps) {
         { role: 'system', content: 'You are an assistant that summarizes conversations to preserve context.' },
         { role: 'user', content: instruction },
       ];
+      // The summary request must READ the whole block, so for Ollama size num_ctx to fit it (else the
+      // server truncates the input to its small default and summarises only the tail — the "resumir
+      // doesn't work with a big context" bug). Other backends manage their own window.
+      const params: GenerationParams = { temperature: 0.3, maxTokens: 1024 };
+      if (doc.provider === 'ollama') {
+        const inputTokens = estTokens(wire.map((m) => m.content).join('\n'));
+        const configured = doc.params.contextLength.enabled ? doc.params.contextLength.value : 0;
+        params.contextLength = summaryContextTokens(inputTokens, configured);
+      }
       abortRef.current = new AbortController();
       let text = '';
       let reasoning = '';
@@ -40,7 +59,7 @@ export function makeSummary(deps: SummaryDeps) {
         await buildProvider(doc.provider).chat(
           doc.model,
           wire,
-          { temperature: 0.3, maxTokens: 1024 },
+          params,
           {
             signal: abortRef.current!.signal,
             onDelta: (d) => { text += d; },
