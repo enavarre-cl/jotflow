@@ -673,7 +673,7 @@
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/vscode": "1.85.0",
-    "@typescript-eslint/eslint-plugin": "^8.62.0",
+    "@typescript-eslint/eslint-plugin": "^8.63.0",
     "@typescript-eslint/parser": "^8.61.0",
     "dictionary-de": "^3.0.0",
     "dictionary-en": "^4.0.0",
@@ -682,11 +682,11 @@
     "dictionary-it": "^2.0.0",
     "dictionary-pt": "^4.0.0",
     "esbuild": "^0.28.1",
-    "eslint": "^10.6.0",
+    "eslint": "^10.7.0",
     "jiti": "^2.7.0",
     "mermaid": "^11.16.0",
     "nspell": "^2.1.5",
-    "tsx": "^4.22.4",
+    "tsx": "^4.23.0",
     "typescript": "^5.4.0"
   },
   "icon": "media/icon.png",
