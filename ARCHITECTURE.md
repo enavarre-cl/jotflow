@@ -135,7 +135,8 @@ graph LR
 
 **Pure, testable cores** (no VS Code / no network, unit-tested in `src/host/test/`):
 `chatHelpers.ts`, `findReplace.ts`, `ollama/parse.ts`, `ollama/assets.ts`, `ollama/htmlMarkdown.ts`,
-`providers/multimodal.ts`, `net.ts`, `audio.ts`, `download.ts`, `circuitBreaker.ts`, `fsRead.ts`
+`providers/multimodal.ts`, `providers/loopGuard.ts` (runaway-repetition detector), `net.ts`, `audio.ts`,
+`download.ts`, `circuitBreaker.ts`, `fsRead.ts`
 (`decodeUtf8Window`), `shellTool.ts` (`capOutput`), `mcpElicit.ts` (`isConfirmation`), `mcp.ts`
 (`computeRoots`), `tools.ts` (`applyTextEdit`). The HTML-scraping parsers in
 `ollama/library.ts` (search / tags / cloud / README) are pure and unit-tested too; only its fetch
@@ -189,6 +190,7 @@ classDiagram
   class StreamCallbacks {
     +onDelta(text)
     +onReasoning(text)
+    +onToolDelta(text)
     +signal: AbortSignal
   }
   LLMProvider ..> StreamCallbacks
@@ -230,12 +232,13 @@ sequenceDiagram
   R->>R: trim context (last-N / auto-summary)
   R->>R: resolveSystemPrompt (inline base + .md layers)
   R->>R: build wire = [system, summary?, history]
-  loop agentic loop (≤ jotflow.tools.maxIterations, 0=∞, one AbortController)
-    R->>P: chat(model, wire, params, callbacks)
+  loop agentic loop (≤ jotflow.tools.maxIterations, 0=∞, one AbortController per turn)
+    R->>P: chat(model, wire, params, callbacks) — per-call AbortController chained to the turn's
     P->>LLM: stream request
     LLM-->>P: deltas (content / reasoning / tool_calls / images)
     P-->>W: streamDelta / streamReasoning
-    P-->>R: ChatResult
+    R->>R: LoopGuard per channel (answer / thinking / tool args): a runaway `la la la…` cuts the call
+    P-->>R: ChatResult (or, on Stop / a guard cut: the partial text streamed so far)
     alt model requested tools
       R->>T: call(tool, args)
       T-->>R: result (fed back into wire)
@@ -250,6 +253,14 @@ sequenceDiagram
 
 Context management before sending: **"last N messages"** (token-budget capped) **or**
 **auto-summary** (compacts older turns into a running summary against the model window).
+
+Cutting a stream short never loses what was already streamed: `runInference` accumulates the deltas
+of the current call and, on **Stop** (the turn's `AbortController`) or a **loop-guard** cut, returns
+that partial text as the answer/thinking so the caller persists it like a normal reply. The guard
+(`providers/loopGuard.ts`, `jotflow.stopOnRepetition`) watches each channel with three tail rules —
+exact period, collapsed vocabulary, collapsed alphabet — aborts the call's own controller on a hit,
+trims the text at the run's start, ends the turn (no tool calls from a degenerate model) and posts a
+persistent banner. The summarizer uses the same guard and fails the summary instead of storing junk.
 
 ---
 

@@ -6,6 +6,7 @@ import type { InferenceDeps } from '../inference';
 import { defaultDoc, ChatDoc } from '../chatDocument';
 import type { ChatMessage, ChatResult, StreamCallbacks, LLMProvider } from '../providers/types';
 import type { ToolHub } from '../tools';
+import * as vscode from 'vscode';
 import type { Webview } from 'vscode';
 
 /**
@@ -199,4 +200,130 @@ test('an empty completion (no answer/thinking/tools) surfaces the "no content" e
   assert.equal(r.answer, '');
   assert.equal(r.failed, false);
   assert.match(String(of(messages, 'error')[0].message), /no content/i);
+});
+
+// ── Stop keeps the partial response ─────────────────────────────────────────────────────────────
+test('Stop keeps the text streamed so far as the answer (and the thinking)', async () => {
+  const doc = mkDoc();
+  const abortRef = { current: undefined as AbortController | undefined };
+  const step: ChatStep = (cb) => {
+    cb.onReasoning?.('thought'); cb.onDelta('partial '); cb.onDelta('answer');
+    abortRef.current?.abort();
+    throw new Error('aborted');
+  };
+  const { deps, messages } = makeDeps({ doc, steps: [step], abortRef });
+
+  const r = await runInference(doc, user('x'), false, deps);
+
+  assert.equal(r.answer, 'partial answer', 'the partial text is returned so the caller persists it');
+  assert.equal(r.thinking, 'thought');
+  assert.equal(r.failed, false);
+  assert.equal(of(messages, 'error').length, 0);
+});
+
+test('Stop mid tool-loop keeps only the current call\'s partial text (no duplicate of the tool-call text)', async () => {
+  const doc = mkDoc({ tools: true });
+  const abortRef = { current: undefined as AbortController | undefined };
+  const steps: ChatStep[] = [
+    (cb) => { cb.onDelta('Let me look.'); return { answer: 'Let me look.', thinking: '', toolCalls: [{ id: 't1', name: 'fs_read', arguments: '{}' }] }; },
+    (cb) => { cb.onDelta('The file says'); abortRef.current?.abort(); throw new Error('aborted'); },
+  ];
+  const { deps } = makeDeps({ doc, steps, abortRef });
+
+  const r = await runInference(doc, user('read'), true, deps);
+
+  assert.equal(r.answer, 'The file says');
+  assert.equal(r.usedTools, true);
+  // The completed tool exchange stays on the doc (its text lives there, not in the final answer).
+  assert.deepEqual(doc.messages.map((m) => m.role), ['assistant', 'tool']);
+  assert.equal(doc.messages[0].content, 'Let me look.');
+});
+
+// ── Loop guard ──────────────────────────────────────────────────────────────────────────────────
+/** A backend that streams `good` and then loops `la la la…` until its signal fires (as readLines would). */
+const loopingStep = (good: string, channel: 'answer' | 'thinking' | 'tool'): ChatStep => (cb) => {
+  cb.onDelta(good);
+  const emit = channel === 'answer' ? cb.onDelta : channel === 'thinking' ? cb.onReasoning! : cb.onToolDelta!;
+  for (let i = 0; i < 1000 && !cb.signal.aborted; i++) emit('la ');
+  if (cb.signal.aborted) throw new Error('aborted');
+  return { answer: good + 'la '.repeat(1000), thinking: '', toolCalls: [{ id: 't', name: 'fs_read', arguments: '{}' }] };
+};
+
+test('a model stuck repeating itself is cut: the run is dropped, the text before it kept, no failure', async () => {
+  const doc = mkDoc();
+  const { deps, messages } = makeDeps({ doc, steps: [loopingStep('The capital is Paris.\n', 'answer')] });
+
+  const r = await runInference(doc, user('capital?'), false, deps);
+
+  assert.equal(r.answer, 'The capital is Paris.', 'kept the good part, dropped the loop');
+  assert.equal(r.failed, false, 'a guard cut is not a failure: the partial answer gets persisted');
+  assert.equal(r.thinking, '');
+  assert.match(String(of(messages, 'error')[0].message), /repeating itself/);
+  assert.equal(of(messages, 'streamEnd').length, 1);
+  // Forwarding to the webview stopped at the cut instead of relaying the whole runaway stream.
+  const streamed = of(messages, 'streamDelta').map((m) => String(m.delta)).join('');
+  assert.ok(streamed.length < 2000, `only ${streamed.length} chars reached the webview`);
+});
+
+test('a loop in the thinking channel cuts the turn, trims the thinking and keeps the answer text', async () => {
+  const doc = mkDoc();
+  const step: ChatStep = (cb) => {
+    cb.onReasoning?.('Let me think.\n');
+    cb.onDelta('Partial answer');
+    for (let i = 0; i < 1000 && !cb.signal.aborted; i++) cb.onReasoning?.('la ');
+    throw new Error('aborted');
+  };
+  const { deps, messages } = makeDeps({ doc, steps: [step] });
+
+  const r = await runInference(doc, user('x'), false, deps);
+
+  assert.equal(r.thinking, 'Let me think.');
+  assert.equal(r.answer, 'Partial answer');
+  assert.match(String(of(messages, 'error')[0].message), /while thinking/);
+});
+
+test('a loop in tool-call arguments ends the turn without running the tool', async () => {
+  const doc = mkDoc({ tools: true });
+  const { deps, toolCalls, messages, providerCalls } = makeDeps({ doc, steps: [loopingStep('Reading…', 'tool')] });
+
+  const r = await runInference(doc, user('x'), true, deps);
+
+  assert.equal(toolCalls.length, 0, 'the runaway call is never executed');
+  assert.equal(providerCalls.length, 1, 'no further iterations');
+  assert.equal(r.answer, 'Reading…');
+  assert.equal(r.usedTools, false);
+  assert.match(String(of(messages, 'error')[0].message), /tool call/);
+});
+
+test('a guard cut with nothing salvageable posts the loop banner only (no "no content" error)', async () => {
+  const doc = mkDoc();
+  const { deps, messages } = makeDeps({ doc, steps: [loopingStep('', 'answer')] });
+
+  const r = await runInference(doc, user('x'), false, deps);
+
+  assert.equal(r.answer, '');
+  assert.equal(of(messages, 'error').length, 1);
+  assert.match(String(of(messages, 'error')[0].message), /repeating itself/);
+});
+
+test('the guard can be switched off (jotflow.stopOnRepetition = false)', async () => {
+  const doc = mkDoc();
+  const ws = vscode.workspace as unknown as { getConfiguration: (s: string) => { get: (k: string, d?: unknown) => unknown } };
+  const orig = ws.getConfiguration;
+  ws.getConfiguration = () => ({ get: (k, d) => (k === 'stopOnRepetition' ? false : d) });
+  try {
+    const step: ChatStep = (cb) => {
+      for (let i = 0; i < 1000; i++) cb.onDelta('la ');
+      assert.equal(cb.signal.aborted, false, 'the stream is never cut');
+      return { answer: 'la '.repeat(1000), thinking: '' };
+    };
+    const { deps, messages } = makeDeps({ doc, steps: [step] });
+
+    const r = await runInference(doc, user('x'), false, deps);
+
+    assert.equal(r.answer.length, 3000);
+    assert.equal(of(messages, 'error').length, 0);
+  } finally {
+    ws.getConfiguration = orig;
+  }
 });

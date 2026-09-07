@@ -78,6 +78,9 @@ export interface GenerationParams {
 export interface StreamCallbacks {
   onDelta: (text: string) => void; // response content
   onReasoning?: (text: string) => void; // reasoning (thinking)
+  /** Raw fragments of tool-call arguments as they stream (providers that fragment them). Lets the
+   *  caller watch that channel for a runaway model; the assembled call still arrives in ChatResult. */
+  onToolDelta?: (text: string) => void;
   signal: AbortSignal;
 }
 

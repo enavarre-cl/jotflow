@@ -2,7 +2,7 @@
   "name": "jotflow",
   "displayName": "Jotflow",
   "description": "%ext.description%",
-  "version": "2.8.5",
+  "version": "2.9.0",
   "publisher": "enavarre",
   "license": "MIT",
   "engines": {
@@ -443,6 +443,11 @@
             "type": "number",
             "default": 2048,
             "description": "%config.maxTokens.desc%"
+          },
+          "jotflow.stopOnRepetition": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "%config.stopOnRepetition.desc%"
           },
           "jotflow.models.source": {
             "type": "string",

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { buildProvider, ChatMessage, GenerationParams } from './providers';
+import { LoopGuard } from './providers/loopGuard';
 import { tr } from './i18n';
 import { estTokens } from './chatHelpers';
 import { ChatDoc } from './chatDocument';
@@ -50,25 +51,30 @@ export function makeSummary(deps: SummaryDeps) {
         const configured = doc.params.contextLength.enabled ? doc.params.contextLength.value : 0;
         params.contextLength = summaryContextTokens(inputTokens, configured);
       }
-      abortRef.current = new AbortController();
+      const ac = new AbortController();
+      abortRef.current = ac;
       let text = '';
       let reasoning = '';
+      // Same runaway-repetition guard as a chat turn: a looping model would otherwise yield a garbage
+      // summary that gets stored and replayed on every later turn. A hit fails the summary instead.
+      const guardOn = vscode.workspace.getConfiguration('jotflow').get<boolean>('stopOnRepetition', true) !== false;
+      const guards = guardOn ? [new LoopGuard(), new LoopGuard()] : undefined;
+      let looped = false;
+      const watch = (g: number, d: string): void => { if (guards?.[g].push(d) && !looped) { looped = true; ac.abort(); } };
       try {
         // No explicit timeout here on purpose: cancellation/timeout is handled by the provider
-        // through the AbortSignal passed below (abortRef.current.signal).
-        await buildProvider(doc.provider).chat(
-          doc.model,
-          wire,
-          params,
-          {
-            signal: abortRef.current!.signal,
-            onDelta: (d) => { text += d; },
-            onReasoning: (d) => { reasoning += d; },
-          }
-        );
+        // through the AbortSignal passed below.
+        await buildProvider(doc.provider).chat(doc.model, wire, params, {
+          signal: ac.signal,
+          onDelta: (d) => { text += d; watch(0, d); },
+          onReasoning: (d) => { reasoning += d; watch(1, d); },
+        });
+      } catch (err) {
+        if (!looped) throw err; // a guard cut is reported below, not as the provider's abort error
       } finally {
         abortRef.current = undefined;
       }
+      if (looped) throw new Error(tr('The model got stuck repeating itself.'));
       // Some reasoning models return text only in the thinking channel.
       return (text.trim() || reasoning.trim());
     };

@@ -2,9 +2,19 @@ import * as vscode from 'vscode';
 import { ChatMessage, ChatResult, TokenUsage, Attachment, LLMProvider } from './providers/types';
 import { ChatDoc, repairTrailingToolChain, resolveGenerationParams } from './chatDocument';
 import { buildProvider, ProviderId } from './providers';
+import { LoopGuard, LoopHit } from './providers/loopGuard';
 import { ToolHub } from './tools';
 import { estTokens, msgTokens, addUsage, errMsg } from './chatHelpers';
 import { tr } from './i18n';
+
+/** Streamed channels watched by the loop guard (each with its own detector). */
+type LoopChannel = 'answer' | 'thinking' | 'tool';
+/** Shown (as a persistent banner) when the guard cuts a stream; English keys, translated via tr(). */
+const LOOP_NOTICE: Record<LoopChannel, string> = {
+  answer: '⚠️ Response stopped: the model got stuck repeating itself. The repeated text was dropped.',
+  thinking: '⚠️ Response stopped: the model got stuck repeating itself while thinking. The repeated text was dropped.',
+  tool: '⚠️ Response stopped: the model got stuck repeating itself in a tool call.',
+};
 
 /** Explicit dependencies for runInference — narrow, typed, no globals. */
 export interface InferenceDeps {
@@ -144,12 +154,15 @@ export async function runInference(
       let usage: TokenUsage | undefined = undefined;
       let images: { mime: string; data: string }[] = [];
       let usedTools = false; // true once a tool call was persisted → the caller must close the chain
+      let looped = false; // true once the loop guard cut a stream (the turn ends there)
 
       // Agentic loop: if the model requests tools, they are executed and fed back.
       // A single AbortController for the ENTIRE turn: so Stop also cuts between
       // iterations and before executing the next tool (not only during chat()).
       const ac = new AbortController();
       abortRef.current = ac;
+      // Runaway-repetition guard (`la la la la…` until max_tokens): on by default, opt-out setting.
+      const stopOnRepetition = vscode.workspace.getConfiguration('jotflow').get<boolean>('stopOnRepetition', true) !== false;
       // Max agentic tool-loop iterations (configurable). 0 = unlimited: the loop still ends when the
       // model stops requesting tools or the user presses Stop (the AbortController breaks it).
       const cfgIters = vscode.workspace.getConfiguration('jotflow').get<number>('tools.maxIterations', 8);
@@ -160,24 +173,70 @@ export async function runInference(
         const id = `m_${Date.now().toString(36)}_${iter}`;
         webview.postMessage({ type: 'streamStart', id });
         let res: ChatResult = { answer: '', thinking: '' };
+        // What this call has streamed so far: adopted as the answer when the stream is cut short
+        // (Stop, or the loop guard) so a partial response is kept instead of vanishing.
+        let partialAnswer = '';
+        let partialThinking = '';
+        // Per-call controller chained to the turn's: the loop guard cuts ONE stream through it,
+        // while the turn-level `ac` keeps meaning "the user pressed Stop".
+        const callAc = new AbortController();
+        const onTurnAbort = (): void => callAc.abort();
+        ac.signal.addEventListener('abort', onTurnAbort, { once: true });
+        let loop: { channel: LoopChannel; hit: LoopHit } | undefined;
+        const guards = stopOnRepetition
+          ? { answer: new LoopGuard(), thinking: new LoopGuard(), tool: new LoopGuard() } : undefined;
+        const watch = (channel: LoopChannel, text: string): void => {
+          const hit = guards?.[channel].push(text);
+          if (hit && !loop) { loop = { channel, hit }; callAc.abort(); }
+        };
         try {
           res = await buildLLM(doc.provider).chat(doc.model, wire, params, {
-            signal: ac.signal,
-            onDelta: (delta) => { webview.postMessage({ type: 'streamDelta', id, delta }); },
-            onReasoning: (delta) => { webview.postMessage({ type: 'streamReasoning', id, delta }); },
+            signal: callAc.signal,
+            onDelta: (delta) => {
+              if (loop) return; // the guard already cut this stream: drop the chunk in flight
+              partialAnswer += delta;
+              webview.postMessage({ type: 'streamDelta', id, delta });
+              watch('answer', delta);
+            },
+            onReasoning: (delta) => {
+              if (loop) return;
+              partialThinking += delta;
+              webview.postMessage({ type: 'streamReasoning', id, delta });
+              watch('thinking', delta);
+            },
+            onToolDelta: (delta) => { if (!loop) watch('tool', delta); },
           });
         } catch (err) {
           if (ac.signal.aborted) aborted = true;
-          else { webview.postMessage({ type: 'error', message: errMsg(err) }); failed = true; }
+          else if (!loop) { webview.postMessage({ type: 'error', message: errMsg(err) }); failed = true; }
+        } finally {
+          ac.signal.removeEventListener('abort', onTurnAbort);
         }
         webview.postMessage({ type: 'streamEnd', id });
         if (res.usage) usage = addUsage(usage, res.usage);
         if (res.images?.length) images = images.concat(res.images);
-        // Only adopt the text of a chat() that actually completed. On failure/abort `res` is the
-        // empty default, so overwriting here would wipe a non-empty answer from a prior iteration.
-        if (!failed && !aborted) { answer = res.answer; thinking = res.thinking; }
-
-        if (failed || aborted || !res.toolCalls || !res.toolCalls.length) break;
+        if (loop) {
+          // Cut by the loop guard: keep what came before the degenerate run and drop the run itself
+          // (fed back next turn it would only make the model loop again). The turn ends here — a
+          // model in this state can't be trusted with tool calls either.
+          looped = true;
+          const { channel, hit } = loop;
+          const cut = (text: string, c: LoopChannel): string => (c === channel ? text.slice(0, hit.start).trimEnd() : text);
+          answer = cut(partialAnswer, 'answer');
+          thinking = cut(partialThinking, 'thinking');
+          webview.postMessage({ type: 'error', message: tr(LOOP_NOTICE[channel]) });
+          break;
+        }
+        if (aborted) {
+          // Stop keeps what was streamed so far (it used to vanish as if the turn had never run).
+          answer = partialAnswer;
+          thinking = partialThinking;
+          break;
+        }
+        if (failed) break;
+        answer = res.answer;
+        thinking = res.thinking;
+        if (!res.toolCalls || !res.toolCalls.length) break;
 
         // The model requested tools: persist the call, execute, and feed back.
         usedTools = true;
@@ -228,7 +287,7 @@ export async function runInference(
       }
       if (abortRef.current === ac) abortRef.current = undefined; // release the turn's controller
 
-      if (!failed && !answer && !thinking && !images.length && !aborted) {
+      if (!failed && !answer && !thinking && !images.length && !aborted && !looped) {
         webview.postMessage({
           type: 'error',
           message: tr('The model returned no content. Try another model; on OpenRouter, check the key\'s credits/limits.'),

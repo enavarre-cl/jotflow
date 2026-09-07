@@ -5,6 +5,32 @@ All notable changes to Jotflow. Format based on
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-09-07
+
+### Added
+- **Loop guard: a model stuck repeating itself is cut off.** Small/quantized models on OpenRouter
+  (e.g. Gemma) sometimes degenerate into `la la la la l la l l la laL …` — in the answer, the thinking,
+  or a tool call's arguments — and keep going until `max_tokens`, burning credits. A pure, unit-tested
+  detector (`providers/loopGuard.ts`) now watches each streamed channel with three tail rules (an
+  exact repeating unit, a vocabulary collapsed to a handful of tokens, an alphabet collapsed to a
+  handful of characters); on a hit the stream is aborted, the repeated run is **dropped** (fed back it
+  would only loop again), the text before it is kept, the turn ends (no tool calls from a model in
+  that state) and a banner explains what happened. The summarizer uses the same guard and fails the
+  summary instead of storing junk. Opt out with `jotflow.stopOnRepetition: false`.
+
+### Fixed
+- **Stop no longer throws away the response.** Pressing Stop mid-stream cancelled the turn as if it
+  had never run: the partial text vanished on the next re-render. The text (and thinking) streamed so
+  far is now returned and persisted like a normal reply, so a Stop on a long answer keeps what you
+  already read (Continue / Regenerate work on it as usual). Stopping in the middle of a tool loop no
+  longer duplicates the text that accompanied the last tool call either.
+
+### Internal
+- `StreamCallbacks.onToolDelta` — providers that stream tool-call arguments in fragments (OpenAI /
+  OpenRouter, Anthropic) now expose them, so the loop guard can watch that channel too. Each
+  `chat()` call runs on its own `AbortController` chained to the turn's, so a guard cut aborts one
+  stream without being mistaken for a user Stop.
+
 ## [2.8.5] - 2026-06-29
 
 ### Fixed

@@ -28,7 +28,9 @@ management and neural text‑to‑speech without leaving the editor.
 | **Per‑conversation settings (⚙)** — backend, model, sampling, read‑aloud | **Jotflow settings** in VS Code |
 | ![Per-conversation settings panel](https://raw.githubusercontent.com/enavarre-cl/jotflow/master/media/img1.png) | ![Jotflow settings in VS Code](https://raw.githubusercontent.com/enavarre-cl/jotflow/master/media/img4.png) |
 
-- 💬 **Streaming** responses, token by token, with a **Stop** button and auto‑save after each turn.
+- 💬 **Streaming** responses, token by token, with a **Stop** button (keeps what was streamed so far)
+  and auto‑save after each turn. A **loop guard** cuts a model stuck repeating itself
+  (`la la la la …`) and drops the repeated run.
 - 🧠 **Reasoning / thinking** and **Tools** panels for models that expose them — each panel's
   **open/closed state is remembered per conversation** (saved in the `.chat`), so closing one keeps it
   closed even while the next answer streams its reasoning or tool calls.
@@ -183,6 +185,7 @@ Settings under `Settings → Jotflow`:
 | `jotflow.anthropic.baseUrl` | `https://api.anthropic.com/v1` | Anthropic Messages API endpoint |
 | `jotflow.temperature` | `0.7` | Sampling temperature |
 | `jotflow.maxTokens` | `2048` | Max tokens (`-1` = unlimited) |
+| `jotflow.stopOnRepetition` | `true` | Cut a response once the model gets stuck repeating itself (answer, thinking or tool call); the text before the loop is kept |
 | `jotflow.tools.maxIterations` | `8` | Max agentic tool-loop rounds per turn (`0` = unlimited) |
 | `jotflow.tools.maxReadBytes` | `100000` | Max bytes returned by the native `fs_read` tool (`0` = unlimited) |
 | `jotflow.mcp.autoAcceptElicitations` | `false` | Auto-accept **confirmation** prompts from MCP servers (yes/no) without a dialog; data requests still ask |
